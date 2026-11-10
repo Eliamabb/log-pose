@@ -1,3 +1,4 @@
+import {validSchedule} from './calendar-data.mjs?v=20261110-4';
 export function valid(data){
  if(!data||!['Personnel','Professionnel'].includes(data.space)||!Array.isArray(data.tasks)||!Array.isArray(data.projects))return false;
  if(data.tasks.length>20000||data.projects.length>2000)return false;
@@ -17,6 +18,7 @@ export function valid(data){
  for(const p of data.projects){if(p.parent&&!data.projects.some(x=>x.id===p.parent&&!x.parent&&x.space===p.space))return false}
  const tids=new Set();
  return data.tasks.every(t=>{if(!t||typeof t!=='object'||tids.has(t.id))return false;tids.add(t.id);
+ if(!validSchedule(t))return false;
  if(t.recurrence!==undefined&&!['none','daily','weekly','monthly'].includes(t.recurrence))return false;
  if(t.recurrenceDay!=null&&(!Number.isInteger(t.recurrenceDay)||t.recurrenceDay<1||t.recurrenceDay>31))return false;
  if(t.dueDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate)||new Date(t.dueDate+'T12:00:00').getDate()!==Number(t.dueDate.slice(-2))))return false;
