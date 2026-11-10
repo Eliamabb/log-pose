@@ -1,5 +1,5 @@
-import {normalize} from './activity.mjs?v=20261110-8';
-import {valid} from './validation.mjs?v=20261110-8';
+import {normalize} from './activity.mjs?v=20261110-9';
+import {valid} from './validation.mjs?v=20261110-9';
 export const MAX_BYTES=800000;
 export function encode(data){
  if(!valid(data))throw Error('La sauvegarde contient des données invalides.');

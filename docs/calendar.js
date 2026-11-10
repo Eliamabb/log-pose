@@ -1,11 +1,11 @@
-import {TimeSelect} from './ui-controls.js?v=20261110-8';
-import {projectOccurrences} from './recurrence.mjs?v=20261110-8';
+import {TimeSelect} from './ui-controls.js?v=20261110-9';
+import {projectOccurrences} from './recurrence.mjs?v=20261110-9';
 import {React as R} from './react.js';
-import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-8';
+import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-9';
 const h=R.createElement;
 const weekdays=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const dateLabel=date=>date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
-export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
+export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule,onCreate=()=>{}}){
  const [view,setView]=R.useState('week'),[anchor,setAnchor]=R.useState(()=>new Date()),[move,setMove]=R.useState(null),[notice,setNotice]=R.useState('');
  const scroll=R.useRef(null),dragged=R.useRef(0);
  R.useEffect(()=>{if(view==='week'&&scroll.current)scroll.current.scrollTop=7*56},[view]);
@@ -26,14 +26,16 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
   const task=displayed.find(item=>item.id===id);
   if(task)apply(task,date,slot);
  }
+ function create(date,slot){if(Date.now()-dragged.current>200)onCreate(date,slot)}
+ function createKeys(event,date,slot){if(event.target===event.currentTarget&&['Enter',' '].includes(event.key)){event.preventDefault();create(date,slot)}}
  function eventButton(task,style){
   const timing=task.startTime?task.startTime+'–'+task.endTime:'Sans horaire';
-  return h('button',{type:'button',key:task.id,className:'calevent '+(task.space==='Professionnel'?'pro':'personal')+(task.status===2?' completed':'')+(task._virtual?' projected':''),style,
-   title:task.title+' · '+task.space+' · '+timing,
-   'aria-label':task.title+' · '+task.space+' · '+timing,
+  return h('button',{type:'button',key:task.id,className:'calevent '+(task._event?'eventcolor':task.space==='Professionnel'?'pro':'personal')+(task.status===2?' completed':'')+(task._virtual?' projected':''),style,
+   title:task.title+' · '+(task._event?'Événement personnel':task.space)+' · '+timing,
+   'aria-label':task.title+' · '+(task._event?'Événement personnel':task.space)+' · '+timing,
    draggable:true,onDragStart:event=>{dragged.current=Date.now();event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('application/x-logpose-task',task.id)},
-   onDragEnd:()=>{dragged.current=Date.now()},onClick:()=>{if(Date.now()-dragged.current>200)onOpen(task)}},
-   h('strong',null,(task._virtual?'↻ ':'')+task.title),h('span',null,timing+' · '+task.space+(task._virtual?' · Prévue':'')));
+   onDragEnd:()=>{dragged.current=Date.now()},onClick:event=>{event.stopPropagation();if(Date.now()-dragged.current>200)onOpen(task)}},
+   h('strong',null,(task._virtual?'↻ ':'')+task.title),h('span',null,timing+' · '+(task._event?'Événement':task.space)+(task._virtual?' · Prévue':'')));
  }
  function changeMove(id){
   const task=displayed.find(item=>item.id===id);
@@ -47,17 +49,17 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
  }
  return h('section',{className:'calendar'},
   h('div',{className:'caltoolbar'},
-   h('div',{className:'actions'},h('button',{type:'button',onClick:()=>setAnchor(shiftPeriod(anchor,view,-1)),'aria-label':'Période précédente'},'‹'),
+   h('div',{className:'actions'},h('button',{type:'button',className:'primary',onClick:()=>onCreate(today,null)},'Créer'),h('button',{type:'button',onClick:()=>setAnchor(shiftPeriod(anchor,view,-1)),'aria-label':'Période précédente'},'‹'),
     h('button',{type:'button',onClick:()=>setAnchor(new Date())},'Aujourd’hui'),
     h('button',{type:'button',onClick:()=>setAnchor(shiftPeriod(anchor,view,1)),'aria-label':'Période suivante'},'›')),
    h('h2',null,title),
    h('div',{className:'switch'},['week','month'].map(value=>h('button',{type:'button',key:value,className:view===value?'chosen':'','aria-pressed':view===value,onClick:()=>setView(value)},value==='week'?'Semaine':'Mois')))),
-  h('div',{className:'callegend'},h('span',{className:'personal'},'Personnel'),h('span',{className:'pro'},'Professionnel'),
-   h('button',{type:'button',disabled:!tasks.length,onClick:()=>move?setMove(null):changeMove(sorted[0].id)},move?'Fermer le déplacement':'Déplacer une tâche')),
-  h('p',{className:'periodnote'},'Les deux espaces sont affichés · horaires locaux · glissez une tâche vers une date ou un créneau. Cliquez sur une tâche pour voir son détail ou la supprimer. ↻ Prévue indique une occurrence à venir.'),
+  h('div',{className:'callegend'},h('span',{className:'personal'},'Personnel'),h('span',{className:'pro'},'Professionnel'),h('span',{className:'eventcolor'},'Événements'),
+   h('button',{type:'button',disabled:!tasks.length,onClick:()=>move?setMove(null):changeMove(sorted[0].id)},move?'Fermer le déplacement':'Déplacer un élément')),
+  h('p',{className:'periodnote'},'Les deux espaces sont affichés · horaires locaux · glissez une tâche vers une date ou un créneau. Cliquez sur une case vide pour créer une tâche ou un événement ; cliquez sur un élément pour le modifier. ↻ Prévue indique une occurrence à venir.'),
   notice&&h('p',{className:'calnotice',role:'status'},notice),
   move&&h('form',{className:'calmove',onSubmit:submitMove},
-   h('label',null,'Tâche',h('select',{value:move.id,onChange:event=>changeMove(event.target.value)},sorted.map(task=>h('option',{key:task.id,value:task.id},task.title+' · '+task.space)))),
+   h('label',null,'Tâche',h('select',{value:move.id,onChange:event=>changeMove(event.target.value)},sorted.map(task=>h('option',{key:task.id,value:task.id},task.title+' · '+(task._event?'Événement personnel':task.space))))),
    h('label',null,'Date',h('input',{type:'date',required:true,value:move.date,onChange:event=>setMove({...move,date:event.target.value})})),
    h('label',null,'Début',h(TimeSelect,{label:'Heure de début',value:move.start,onChange:value=>setMove({...move,start:value})})),
    h('label',null,'Fin',h(TimeSelect,{label:'Heure de fin',value:move.end,onChange:value=>setMove({...move,end:value})})),
@@ -65,21 +67,21 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
   view==='week'?h('div',{className:'calweekviewport',ref:scroll},
    h('div',{className:'calweek'},
     h('div',{className:'caldayheaders'},h('div',{className:'calcorner'},'Heures'),days.map((day,index)=>h('div',{className:dateKey(day)===today?'today':'',key:dateKey(day)},weekdays[index],h('b',null,day.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}))))),
-    h('div',{className:'calallday'},h('span',null,'Sans horaire'),days.map(day=>h('div',{key:dateKey(day),onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),null),'aria-label':'Sans horaire le '+dateLabel(day)},
+    h('div',{className:'calallday'},h('span',null,'Sans horaire'),days.map(day=>h('div',{key:dateKey(day),onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),null),role:'button',tabIndex:0,onClick:()=>create(dateKey(day),null),onKeyDown:event=>createKeys(event,dateKey(day),null),'aria-label':'Créer sans horaire le '+dateLabel(day)},
      sorted.filter(task=>task.dueDate===dateKey(day)&&!task.startTime).map(task=>eventButton(task))))),
     h('div',{className:'calhoursbody'},h('div',{className:'calhourlabels'},Array.from({length:24},(_,hour)=>h('div',{key:hour},String(hour).padStart(2,'0')+':00'))),
      days.map(day=>h('div',{className:'caltimedday',key:dateKey(day)},
-      Array.from({length:96},(_,slot)=>h('div',{className:'calslot',key:slot,onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),slot*15)})),
+      Array.from({length:96},(_,slot)=>h('div',{className:'calslot',key:slot,role:'button',tabIndex:0,'aria-label':'Créer le '+dateLabel(day)+' à '+String(Math.floor(slot/4)).padStart(2,'0')+':'+String(slot%4*15).padStart(2,'0'),onClick:()=>create(dateKey(day),slot*15),onKeyDown:event=>createKeys(event,dateKey(day),slot*15),onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),slot*15)})),
       layoutTimedTasks(sorted.filter(task=>task.dueDate===dateKey(day))).map(item=>eventButton(item.task,{
        top:(item.start/60*56)+'px',height:Math.max(22,(item.end-item.start)/60*56)+'px',
        left:'calc('+item.column*100/item.columns+'% + 2px)',width:'calc('+100/item.columns+'% - 4px)'}))))))):
    h('div',{className:'calmonthviewport'},h('div',{className:'calmonth'},
     weekdays.map(day=>h('div',{className:'calmonthheading',key:day},day)),
-    days.map(day=>h('section',{key:dateKey(day),className:'calmonthday'+(day.getMonth()!==anchor.getMonth()?' outside':'')+(dateKey(day)===today?' today':''),onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day)),'aria-label':dateLabel(day)},
+    days.map(day=>h('section',{key:dateKey(day),className:'calmonthday'+(day.getMonth()!==anchor.getMonth()?' outside':'')+(dateKey(day)===today?' today':''),onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day)),role:'button',tabIndex:0,onClick:()=>create(dateKey(day),null),onKeyDown:event=>createKeys(event,dateKey(day),null),'aria-label':'Créer le '+dateLabel(day)},
      h('h3',null,day.getDate()),sorted.filter(task=>task.dueDate===dateKey(day)).map(task=>eventButton(task)))))),
-  h('section',{className:'calundated'},h('h3',null,'Tâches sans date ('+undated.length+')'),
-   h('p',null,'Vous pouvez les glisser dans le calendrier ou utiliser Déplacer une tâche.'),
+  h('section',{className:'calundated'},h('h3',null,'Éléments sans date ('+undated.length+')'),
+   h('p',null,'Vous pouvez les glisser dans le calendrier ou utiliser Déplacer un élément.'),
    h('div',null,undated.map(task=>eventButton(task)))),
-  !tasks.length&&h('p',{className:'chartempty'},'Créez une tâche dans le tableau de bord pour commencer à planifier.')
+  !tasks.length&&h('p',{className:'chartempty'},'Cliquez sur une case vide ou sur Créer pour ajouter une tâche ou un événement.')
  );
 }

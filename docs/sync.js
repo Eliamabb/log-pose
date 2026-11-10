@@ -1,9 +1,9 @@
-import {normalize} from './activity.mjs?v=20261110-8';
+import {normalize} from './activity.mjs?v=20261110-9';
 import {Login} from './login.js';
 import {React as R} from './react.js';
 import {empty,restore} from './model.mjs';
 import {getServices,message} from './firebase.js';
-import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-8';
+import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-9';
 const h=R.createElement;
 function exportData(data){
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
@@ -33,7 +33,7 @@ export function useCloud(setData){
     if(snapshot.metadata.fromCache){setState(s=>({...s,phase:'loading',message:'Connexion à Firebase…'}));return}
     const saved=decode(snapshot.exists()?snapshot.data():null);
     session.revision=saved.revision;setData(saved.data||empty());
-    setState({phase:'ready',email:user.email,local:!!(local.current?.tasks.length||local.current?.projects.length)});
+    setState({phase:'ready',email:user.email,local:!!(local.current?.tasks.length||local.current?.projects.length||local.current?.events?.length)});
    }catch(error){setState(s=>({...s,phase:'loaderror',message:message(error)}))}
   },error=>{if(generation===session.generation)setState(s=>({...s,phase:'loaderror',message:message(error)}))});
  }
@@ -95,9 +95,10 @@ export function useCloud(setData){
   const combined={...data,projects:[...data.projects],tasks:[...data.tasks],activities:[...(data.activities||[])]};
   const eventIds=new Set(combined.activities.map(event=>event.id));
   for(const event of legacy.activities)if(!eventIds.has(event.id))combined.activities.push(event);
-  for(const key of ['projects','tasks']){
+  for(const key of ['projects','tasks','events']){
+   combined[key]=combined[key]||[];
    const ids=new Set(combined[key].map(item=>item.id));
-   for(const item of local.current[key])if(!ids.has(item.id))combined[key].push(item);
+   for(const item of local.current[key]||[])if(!ids.has(item.id))combined[key].push(item);
   }
   if(await persist(combined)){localStorage.removeItem('logpose-v1');local.current=null;setState(s=>({...s,local:false}))}
  }

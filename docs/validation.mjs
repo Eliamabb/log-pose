@@ -1,4 +1,4 @@
-import {validSchedule} from './calendar-data.mjs?v=20261110-8';
+import {validSchedule} from './calendar-data.mjs?v=20261110-9';
 export function valid(data){
  if(!data||!['Personnel','Professionnel'].includes(data.space)||!Array.isArray(data.tasks)||!Array.isArray(data.projects))return false;
  if(data.tasks.length>20000||data.projects.length>2000)return false;
@@ -17,6 +17,16 @@ export function valid(data){
  const ids=new Set();
  for(const p of data.projects){if(!p||typeof p.id!=='string'||ids.has(p.id)||typeof p.name!=='string'||!p.name.trim()||!['Personnel','Professionnel'].includes(p.space))return false;if(p.archived!==undefined&&typeof p.archived!=='boolean')return false;ids.add(p.id)}
  for(const p of data.projects){if(p.parent&&!data.projects.some(x=>x.id===p.parent&&!x.parent&&x.space===p.space))return false}
+ if(data.events!==undefined){
+  if(!Array.isArray(data.events)||data.events.length>20000)return false;
+  const eventIds=new Set();
+  for(const event of data.events){
+   if(!event||typeof event.id!=='string'||eventIds.has(event.id)||typeof event.title!=='string'||!event.title.trim()||event.space!=='Personnel'||![0,1,2].includes(event.status)||!validSchedule(event))return false;
+   if(event.description!==undefined&&typeof event.description!=='string')return false;
+   if(['priority','project','recurrence','_event','_eventId'].some(key=>event[key]!==undefined))return false;
+   eventIds.add(event.id);
+  }
+ }
  const tids=new Set();
  return data.tasks.every(t=>{if(!t||typeof t!=='object'||tids.has(t.id))return false;tids.add(t.id);
  if(t._virtual||t._sourceTaskId||t._occurrenceDate)return false;

@@ -1,5 +1,5 @@
-import {uniqueCompletions} from './task-retention.mjs?v=20261110-8';
-import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-8';
+import {uniqueCompletions} from './task-retention.mjs?v=20261110-9';
+import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-9';
 export const recurrenceLabels={none:'Aucune',daily:'Tous les jours',weekly:'Toutes les semaines',monthly:'Tous les mois'};
 const uuid=()=>crypto.randomUUID();
 export function isArchived(projectId,projects){
