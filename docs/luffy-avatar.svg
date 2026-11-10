@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Luffy au chapeau de paille">
+ <defs><clipPath id="round"><circle cx="50" cy="50" r="50"/></clipPath></defs>
+ <g clip-path="url(#round)" stroke="#241d20" stroke-width="2" stroke-linejoin="round">
+  <path fill="#51436b" stroke="none" d="M0 0h100v100H0z"/>
+  <path fill="#c94443" d="M13 102q3-24 26-26h22q23 2 26 26"/>
+  <path fill="#edb987" d="M40 70v15l10 8 10-8V70"/>
+  <path fill="#151820" d="m22 40 3 24 8-4 2 10 8-5 25 5 2-12 8 5 2-25z"/>
+  <ellipse fill="#f5c496" cx="29" cy="54" rx="6" ry="9"/><ellipse fill="#f5c496" cx="71" cy="54" rx="6" ry="9"/>
+  <path fill="#f5c496" d="M29 38q21-12 42 0v21q-1 19-21 23-20-4-21-23z"/>
+  <path fill="#151820" d="m28 40 3 14 6-15 6 9 7-11 10 10 3-8 9 15 1-18z"/>
+  <path fill="#e9be61" d="M25 33q1-23 25-24 24 1 25 24z"/>
+  <path fill="#c94643" d="M25 29q25-6 50 0v8H25z"/>
+  <ellipse fill="#edca78" cx="50" cy="37" rx="43" ry="8"/>
+  <path fill="none" stroke="#c99f4f" stroke-width="1" d="m34 16-3 10m11-13-2 12m11-13v13m9-11 2 12m7-8 3 9M14 38q36 9 72 0"/>
+  <path fill="none" stroke-linecap="round" d="m35 51 7-1m16 0 7 1"/>
+  <ellipse cx="39" cy="55" rx="2" ry="3" fill="#201b20" stroke="none"/><ellipse cx="61" cy="55" rx="2" ry="3" fill="#201b20" stroke="none"/>
+  <path fill="none" stroke-width="1.4" d="m64 61 8-1m-6-2 1 5m3-5 1 4m-22-6-1 7h3"/>
+  <path fill="#fff5e6" d="M36 67q14 5 28 0-3 11-14 11T36 67z"/>
+  <path fill="none" stroke-width="1" d="M38 71h24"/>
+ </g>
+</svg>

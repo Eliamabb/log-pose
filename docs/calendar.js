@@ -1,6 +1,7 @@
-import {projectOccurrences} from './recurrence.mjs?v=20261110-5';
+import {TimeSelect} from './ui-controls.js?v=20261110-6';
+import {projectOccurrences} from './recurrence.mjs?v=20261110-6';
 import {React as R} from './react.js';
-import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-5';
+import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-6';
 const h=R.createElement;
 const weekdays=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const dateLabel=date=>date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
@@ -53,13 +54,13 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
    h('div',{className:'switch'},['week','month'].map(value=>h('button',{type:'button',key:value,className:view===value?'chosen':'','aria-pressed':view===value,onClick:()=>setView(value)},value==='week'?'Semaine':'Mois')))),
   h('div',{className:'callegend'},h('span',{className:'personal'},'Personnel'),h('span',{className:'pro'},'Professionnel'),
    h('button',{type:'button',disabled:!tasks.length,onClick:()=>move?setMove(null):changeMove(sorted[0].id)},move?'Fermer le déplacement':'Déplacer une tâche')),
-  h('p',{className:'periodnote'},'Les deux espaces sont affichés · horaires locaux · glissez une tâche vers une date ou un créneau. ↻ Prévue indique une occurrence à venir.'),
+  h('p',{className:'periodnote'},'Les deux espaces sont affichés · horaires locaux · glissez une tâche vers une date ou un créneau. Cliquez sur une tâche pour voir son détail ou la supprimer. ↻ Prévue indique une occurrence à venir.'),
   notice&&h('p',{className:'calnotice',role:'status'},notice),
   move&&h('form',{className:'calmove',onSubmit:submitMove},
    h('label',null,'Tâche',h('select',{value:move.id,onChange:event=>changeMove(event.target.value)},sorted.map(task=>h('option',{key:task.id,value:task.id},task.title+' · '+task.space)))),
    h('label',null,'Date',h('input',{type:'date',required:true,value:move.date,onChange:event=>setMove({...move,date:event.target.value})})),
-   h('label',null,'Début',h('input',{type:'time',value:move.start,onChange:event=>setMove({...move,start:event.target.value})})),
-   h('label',null,'Fin',h('input',{type:'time',value:move.end,onChange:event=>setMove({...move,end:event.target.value})})),
+   h('label',null,'Début',h(TimeSelect,{label:'Heure de début',value:move.start,onChange:value=>setMove({...move,start:value})})),
+   h('label',null,'Fin',h(TimeSelect,{label:'Heure de fin',value:move.end,onChange:value=>setMove({...move,end:value})})),
    h('button',{type:'submit',className:'primary'},'Enregistrer')),
   view==='week'?h('div',{className:'calweekviewport',ref:scroll},
    h('div',{className:'calweek'},
@@ -68,7 +69,7 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule}){
      sorted.filter(task=>task.dueDate===dateKey(day)&&!task.startTime).map(task=>eventButton(task))))),
     h('div',{className:'calhoursbody'},h('div',{className:'calhourlabels'},Array.from({length:24},(_,hour)=>h('div',{key:hour},String(hour).padStart(2,'0')+':00'))),
      days.map(day=>h('div',{className:'caltimedday',key:dateKey(day)},
-      Array.from({length:48},(_,slot)=>h('div',{className:'calslot',key:slot,onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),slot*30)})),
+      Array.from({length:96},(_,slot)=>h('div',{className:'calslot',key:slot,onDragOver:event=>event.preventDefault(),onDrop:event=>drop(event,dateKey(day),slot*15)})),
       layoutTimedTasks(sorted.filter(task=>task.dueDate===dateKey(day))).map(item=>eventButton(item.task,{
        top:(item.start/60*56)+'px',height:Math.max(22,(item.end-item.start)/60*56)+'px',
        left:'calc('+item.column*100/item.columns+'% + 2px)',width:'calc('+100/item.columns+'% - 4px)'}))))))):

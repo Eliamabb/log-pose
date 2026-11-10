@@ -1,4 +1,4 @@
-import {dateKey,parseDay} from './calendar-data.mjs?v=20261110-5';
+import {dateKey,parseDay} from './calendar-data.mjs?v=20261110-6';
 const frequencies=new Set(['daily','weekly','monthly']);
 export function seriesKeys(tasks){
  const byId=new Map(tasks.map(task=>[task.id,task]));
@@ -82,4 +82,14 @@ export function materializeOccurrence(data,task){
  if(exists)throw Error('Cette occurrence existe déjà. Rechargez le calendrier.');
  const {_virtual,_sourceTaskId,_occurrenceDate,nextTaskId,...saved}=task;
  return {...data,tasks:[...tasks,{...saved,id:crypto.randomUUID(),seriesId,recurrenceSourceDate:_occurrenceDate,seriesStartTime:source.seriesStartTime??source.startTime??'',seriesEndTime:source.seriesEndTime??source.endTime??''}]};
+}
+export function removeOccurrence(data,task){
+ if(!task._virtual)return {...data,tasks:data.tasks.filter(item=>item.id!==task.id)};
+ const tasks=withSeriesIds(data.tasks),source=tasks.find(item=>item.id===task._sourceTaskId);
+ if(!source)throw Error('La série a changé. Rouvrez le calendrier.');
+ const seriesId=source.seriesId||source.id,date=task._occurrenceDate;
+ if(tasks.some(item=>item.seriesId===seriesId&&(item.recurrenceSourceDate||item.dueDate)===date))throw Error('Cette occurrence a changé. Rouvrez le calendrier.');
+ const skips=[...(data.recurrenceSkips||[])];
+ if(!skips.some(item=>item.seriesId===seriesId&&item.date===date))skips.push({seriesId,date,projectId:source.project||''});
+ return {...data,tasks,recurrenceSkips:skips};
 }

@@ -1,9 +1,9 @@
-import {normalize} from './activity.mjs?v=20261110-5';
+import {normalize} from './activity.mjs?v=20261110-6';
 import {Login} from './login.js';
 import {React as R} from './react.js';
 import {empty,restore} from './model.mjs';
 import {getServices,message} from './firebase.js';
-import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-5';
+import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-6';
 const h=R.createElement;
 function exportData(data){
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
@@ -131,5 +131,6 @@ export function useCloud(setData){
      }catch(error){window.alert(message(error))}
     }})));
  }
- return {panel,persist,locked};
+ const label=({loading:'Connexion…',signin:'Se connecter',ready:'✓ Synchronisé',saving:'Enregistrement…',loaderror:'Erreur de connexion',saveerror:'Sauvegarde en attente',conflict:'Conflit de synchronisation'})[state.phase];
+ return {panel,persist,locked,label};
 }
