@@ -1,3 +1,4 @@
+import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-5';
 export const recurrenceLabels={none:'Aucune',daily:'Tous les jours',weekly:'Toutes les semaines',monthly:'Tous les mois'};
 const uuid=()=>crypto.randomUUID();
 export function isArchived(projectId,projects){
@@ -41,27 +42,42 @@ export function recordChanges(before,next,now=Date.now()){
  const removedProjects=new Set(before.projects.filter(project=>!next.projects.some(item=>item.id===project.id)).map(project=>project.id));
  const activities=[...(next.activityVersion===1?next.activities:original.activities)]
   .filter(event=>!removedProjects.has(event.projectId)&&!removedProjects.has(event.rootProjectId));
- let tasks=next.tasks.map(task=>({...task}));
+ let tasks=withSeriesIds(next.tasks);
  const byId=new Map(before.tasks.map(task=>[task.id,task]));
  for(const task of tasks){
   const old=byId.get(task.id);
   if(task.status===2&&old?.status!==2){
    task.date=now;
    activities.push({id:uuid(),action:'completed',timestamp:now,...snapshot(task,next.projects)});
-   const schedule=['daily','weekly','monthly'].includes(task.recurrence)&&!task.nextTaskId?nextDue(task,new Date(now)):null;
+   let schedule=['daily','weekly','monthly'].includes(task.recurrence)&&!task.nextTaskId?nextDue({...task,dueDate:task.recurrenceSourceDate||task.dueDate},new Date(now)):null;
+   while(schedule&&(next.recurrenceSkips||[]).some(item=>item.seriesId===task.seriesId&&item.date===schedule.dueDate)){
+    schedule=nextDue({...task,dueDate:schedule.dueDate,recurrenceDay:schedule.recurrenceDay},new Date(now));
+   }
    if(schedule){
-    const nextId=uuid();
-    task.nextTaskId=nextId;
-    const {nextTaskId,date,...template}=task;
-    tasks.push({...template,id:nextId,status:0,date:null,...schedule});
+    const existing=tasks.find(item=>item.id!==task.id&&item.seriesId===task.seriesId&&(item.recurrenceSourceDate||item.dueDate)===schedule.dueDate);
+    if(existing)task.nextTaskId=existing.id;
+    else{
+     const nextId=uuid();task.nextTaskId=nextId;
+     const {nextTaskId,date,recurrenceSourceDate,seriesStartTime,seriesEndTime,...template}=task;
+     tasks.push({...template,id:nextId,status:0,date:null,...schedule,
+      startTime:seriesStartTime??task.startTime??'',endTime:seriesEndTime??task.endTime??''});
+    }
    }
   }else if(old?.status===2&&task.status!==2){
    activities.push({id:uuid(),action:'reopened',timestamp:now,...snapshot(old,before.projects)});
   }
  }
  const ids=new Set(next.tasks.map(task=>task.id));
+ const recurrenceSkips=[...(next.recurrenceSkips||[])].filter(item=>!removedProjects.has(item.projectId));
+ const oldKeys=seriesKeys(before.tasks);
+ for(const task of before.tasks){
+  if(!ids.has(task.id)&&!removedProjects.has(task.project)&&task.dueDate&&['daily','weekly','monthly'].includes(task.recurrence)){
+   const key=task.seriesId||oldKeys.get(task.id),date=task.recurrenceSourceDate||task.dueDate;
+   if(!recurrenceSkips.some(item=>item.seriesId===key&&item.date===date))recurrenceSkips.push({seriesId:key,date,projectId:task.project||''});
+  }
+ }
  for(const task of before.tasks)if(!ids.has(task.id)&&!removedProjects.has(task.project))activities.push({id:uuid(),action:'deleted',timestamp:now,...snapshot(task,before.projects)});
- return {...next,tasks,activities,activityVersion:1};
+ return {...next,tasks,activities,activityVersion:1,recurrenceSkips};
 }
 export function archiveProject(data,id,archived,now=Date.now()){
  const state=normalize(data),project=state.projects.find(item=>item.id===id);
@@ -80,7 +96,8 @@ export function deleteProject(data,id){
  return {...state,
   projects:state.projects.filter(project=>!removed.has(project.id)),
   tasks:state.tasks.filter(task=>!removed.has(task.project)),
-  activities:state.activities.filter(event=>!removed.has(event.projectId)&&!removed.has(event.rootProjectId))
+  activities:state.activities.filter(event=>!removed.has(event.projectId)&&!removed.has(event.rootProjectId)),
+  recurrenceSkips:(state.recurrenceSkips||[]).filter(item=>!removed.has(item.projectId))
  };
 }
 export function completions(data,space,filter=''){

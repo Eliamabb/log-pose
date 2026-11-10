@@ -1,9 +1,9 @@
-import {normalize} from './activity.mjs?v=20261110-3';
+import {normalize} from './activity.mjs?v=20261110-5';
 import {Login} from './login.js';
 import {React as R} from './react.js';
 import {empty,restore} from './model.mjs';
 import {getServices,message} from './firebase.js';
-import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-4';
+import {saveSnapshot,decode,encode} from './store.mjs?v=20261110-5';
 const h=R.createElement;
 function exportData(data){
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});

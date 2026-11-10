@@ -46,7 +46,7 @@ export function TaskStatistics({tasks,projects,globalTasks=tasks,globalProjects=
      h('tbody',null,weeks.map(week=>h('tr',{key:week.start.toISOString()},h('td',null,week.start.toLocaleDateString('fr-FR')),h('td',null,week.count))))))),
   h('section',{className:'chartpanel'},
    h('h3',null,'Répartition globale des réalisations par projet'),
-   h('p',null,'Tous les projets · Personnel et Professionnel · toutes les dates. Les sous-projets sont regroupés avec leur parent.'),
+   h('p',null,'Personnel et Professionnel · toutes les dates · filtre de projet sélectionné. Les sous-projets sont regroupés avec leur parent.'),
    h('p',{className:'periodnote'},total+' réalisation(s) au total'),
    total?h('div',{className:'piecontent'},
     h('svg',{viewBox:'0 0 200 200',className:'piechart',role:'img','aria-label':'Répartition de '+total+' tâches terminées. Les catégories et pourcentages figurent dans la légende.'},

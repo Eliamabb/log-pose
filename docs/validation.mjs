@@ -1,4 +1,4 @@
-import {validSchedule} from './calendar-data.mjs?v=20261110-4';
+import {validSchedule} from './calendar-data.mjs?v=20261110-5';
 export function valid(data){
  if(!data||!['Personnel','Professionnel'].includes(data.space)||!Array.isArray(data.tasks)||!Array.isArray(data.projects))return false;
  if(data.tasks.length>20000||data.projects.length>2000)return false;
@@ -13,11 +13,15 @@ export function valid(data){
    eventIds.add(event.id);
   }
  }
+ if(data.recurrenceSkips!==undefined&&(!Array.isArray(data.recurrenceSkips)||!data.recurrenceSkips.every(item=>item&&typeof item.seriesId==='string'&&typeof item.projectId==='string'&&typeof item.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(item.date))))return false;
  const ids=new Set();
  for(const p of data.projects){if(!p||typeof p.id!=='string'||ids.has(p.id)||typeof p.name!=='string'||!p.name.trim()||!['Personnel','Professionnel'].includes(p.space))return false;if(p.archived!==undefined&&typeof p.archived!=='boolean')return false;ids.add(p.id)}
  for(const p of data.projects){if(p.parent&&!data.projects.some(x=>x.id===p.parent&&!x.parent&&x.space===p.space))return false}
  const tids=new Set();
  return data.tasks.every(t=>{if(!t||typeof t!=='object'||tids.has(t.id))return false;tids.add(t.id);
+ if(t._virtual||t._sourceTaskId||t._occurrenceDate)return false;
+ if(t.seriesId!==undefined&&typeof t.seriesId!=='string')return false;
+ if(t.recurrenceSourceDate!==undefined&&(typeof t.recurrenceSourceDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(t.recurrenceSourceDate)))return false;
  if(!validSchedule(t))return false;
  if(t.recurrence!==undefined&&!['none','daily','weekly','monthly'].includes(t.recurrence))return false;
  if(t.recurrenceDay!=null&&(!Number.isInteger(t.recurrenceDay)||t.recurrenceDay<1||t.recurrenceDay>31))return false;

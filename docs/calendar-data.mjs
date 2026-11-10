@@ -23,7 +23,7 @@ export function reschedule(task,date,startTime=task.startTime||'',endTime=task.e
  const next={...task,dueDate:date,startTime,endTime};
  if(!validSchedule(next))throw Error('Choisissez une date et un créneau valide dont la fin est après le début, le même jour.');
  if(task.recurrenceEndDate&&date>task.recurrenceEndDate)throw Error('Cette date dépasse la fin de la récurrence. Modifiez d’abord sa date de fin.');
- if(date!==task.dueDate)next.recurrenceDay=parseDay(date)?.getDate()||null;
+ if(date!==task.dueDate&&!task.recurrenceSourceDate&&!task._virtual)next.recurrenceDay=parseDay(date)?.getDate()||null;
  return next;
 }
 export function droppedTask(task,date,slot){
