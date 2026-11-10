@@ -1,29 +1,43 @@
-import {TimeSelect,ProjectFilter} from './ui-controls.js?v=20261110-6';
-import {materializeOccurrence,removeOccurrence} from './recurrence.mjs?v=20261110-6';
-import {Calendar} from './calendar.js?v=20261110-6';
-import {validSchedule} from './calendar-data.mjs?v=20261110-6';
-import {recordChanges,archiveProject,deleteProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs?v=20261110-6';
-import {TaskStatistics} from './statistics.js?v=20261110-6';
-import {useCloud} from './sync.js?v=20261110-6';
+import {projectStyle,completionXPGain} from './project-colors.mjs?v=20261110-7';
+import {TimeSelect,ProjectFilter} from './ui-controls.js?v=20261110-7';
+import {materializeOccurrence,removeOccurrence} from './recurrence.mjs?v=20261110-7';
+import {Calendar} from './calendar.js?v=20261110-7';
+import {validSchedule} from './calendar-data.mjs?v=20261110-7';
+import {recordChanges,archiveProject,deleteProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs?v=20261110-7';
+import {TaskStatistics} from './statistics.js?v=20261110-7';
+import {useCloud} from './sync.js?v=20261110-7';
 import {React as R,DOM} from './react.js';import {draw} from './sea.js';import {profile,move,status,priorities,grades,restore,save,empty} from './model.mjs';
 const h=R.createElement,S=R.useState,spaces=['Personnel','Professionnel'],uid=()=>crypto.randomUUID();
 const paths={calendar:'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2',compass:'M12 2 15 9 22 12 15 15 12 22 9 15 2 12 9 9Z M12 5v7l-6 0 M12 12l6 0-6 7Z',board:'M3 5h18v14H3z M9 5v14 M15 5v14',stats:'M3 20h18 M6 16v-5 M12 16V4 M18 16V8',folder:'M2 7V5h7l2 3h11v12H2z',plus:'M12 5v14 M5 12h14',anchor:'M12 8v13 M9 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M3 13q0 7 9 8 9-1 9-8 M3 16v-3h3 M18 13h3v3',person:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M4 21q0-8 8-8t8 8',case:'M3 7h18v13H3z M8 7V4h8v3 M3 12q9 4 18 0',circle:'M12 3a9 9 0 1 0 .01 0',clock:'M12 3a9 9 0 1 0 .01 0 M12 7v5l4 2',check:'M12 3a9 9 0 1 0 .01 0 M8 12l3 3 5-6',edit:'m4 16 12-12 4 4L8 20H4z',layers:'m12 3 10 5-10 5L2 8z M2 12l10 5 10-5 M2 16l10 5 10-5'};
 function icon(name,size=18){return h('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true},h('path',{d:paths[name]}))}
-function btn(label,action,cls='',ico){return h('button',{onClick:action,className:cls,type:'button'},ico&&icon(ico),label)}
+function btn(label,action,cls='',ico,style){return h('button',{onClick:action,className:cls,type:'button',style},ico&&icon(ico),label)}
 function sel(v,change,opts,label){return h('select',{value:v,onChange:e=>change(e.target.value),'aria-label':label},opts.map(([v,t])=>h('option',{key:v,value:v},t)))}
 function Sea(){let ref=R.useRef(null);R.useEffect(()=>draw(ref.current),[]);return h('canvas',{ref,className:'sea','aria-hidden':true})}
-function App(){const [db,set]=S(empty),[tab,T]=S(0),[filter,F]=S(''),[modal,M]=S(null),[notice,N]=S('');const timer=R.useRef(),dialog=R.useRef();R.useEffect(()=>{if(modal&&!dialog.current.open)dialog.current.showModal()},[modal]);const cloud=useCloud(set);
+function App(){const [db,set]=S(empty),[tab,T]=S(0),[filter,F]=S(''),[modal,M]=S(null),[notice,N]=S(''),[xpGain,X]=S(null);const timer=R.useRef(),xpTimer=R.useRef(),dialog=R.useRef();R.useEffect(()=>()=>{clearTimeout(timer.current);clearTimeout(xpTimer.current)},[]);R.useEffect(()=>{if(modal&&!dialog.current.open)dialog.current.showModal()},[modal]);const cloud=useCloud(set);
 async function commit(next){
  next=recordChanges(db,next);
  if(cloud.locked)return false;
  const a=profile(db.tasks),b=profile(next.tasks);
  if(await cloud.persist(next)){
+  const gain=completionXPGain(db.tasks,next.tasks);
+  if(gain>0){X({amount:gain,id:uid()});clearTimeout(xpTimer.current);xpTimer.current=setTimeout(()=>X(null),2600)}
   if(b.level>a.level){N('Niveau '+b.level+' atteint ! 🎉 · '+b.grade);clearTimeout(timer.current);timer.current=setTimeout(()=>N(''),3600)}
   return true;
  }
  return false;
 }
 const p=profile(db.tasks),projects=db.projects.filter(x=>tab===2||x.space===db.space),tasks=db.tasks.filter(x=>(tab===2||x.space===db.space)&&(tab!==0||!isArchived(x.project,db.projects))),roots=projects.filter(x=>!x.parent&&(tab!==0||!isArchived(x.id,db.projects))),belongs=(t,id)=>t.project===id||projects.some(x=>x.id===t.project&&x.parent===id),visible=tasks.filter(t=>!filter||belongs(t,filter)),projectName=id=>projects.find(x=>x.id===id)?.name,selected=projects.find(x=>x.id===filter),parent=selected?.parent||filter;
+async function changeTaskStatus(task,value){
+ if(cloud.locked||Number(value)===task.status)return;
+ try{
+  const {kind,...changed}=task;
+  const currentTask=task._virtual?changed:db.tasks.find(item=>item.id===task.id);
+  if(!currentTask)throw Error('Cette tâche a changé. Rouvrez le calendrier.');
+  const next=materializeOccurrence(db,{...currentTask,status:Number(value)});
+  const saved=task._virtual?next.tasks.find(item=>!db.tasks.some(old=>old.id===item.id)):next.tasks.find(item=>item.id===task.id);
+  if(await commit(next))M(Number(value)===2?null:{...saved,kind:'detail'});
+ }catch(error){window.alert(error.message)}
+}
 async function removeTask(task){
  if(cloud.locked)return;
  const message=task._virtual?'Supprimer uniquement cette occurrence prévue ? Les autres dates de la série sont conservées.':task.recurrence&&task.recurrence!=='none'?'Supprimer cette tâche ? Ses prévisions à venir ne seront plus affichées si elle est la tâche source de la série. Les occurrences déjà enregistrées et le journal sont conservés.':'Supprimer cette tâche ? Son historique de réalisation est conservé dans le journal.';
@@ -97,7 +111,7 @@ function projectTasks(project){
    if(!group.length)return null;
    return h('section',{className:'projecttaskgroup',key:label},
     h('h4',null,label+' · '+group.length),
-    group.map(task=>h('button',{type:'button',className:'projecttask',key:task.id,onClick:()=>M({...task,kind:'detail'})},
+    group.map(task=>h('button',{type:'button',className:'projecttask projectcolored'+(task.status===2?' completed':''),style:projectStyle(task.project,db.projects),key:task.id,onClick:()=>M({...task,kind:'detail'})},
      h('strong',null,task.title),
      h('span',null,task.priority+' · '+(projectName(task.project)||'Tâche indépendante')),
      task.description&&h('p',null,task.description)))
@@ -112,7 +126,7 @@ function projectTree(){
  const node=(project,isChild)=>{
   const list=tasks.filter(task=>isChild?task.project===project.id:belongs(task,project.id));
   const done=list.filter(task=>task.status===2).length;
-  return h('div',{className:'treenode',key:project.id},
+  return h('div',{className:'treenode projectcolored',style:projectStyle(project.id,db.projects),key:project.id},
    btn(project.name,()=>openProject(project),'plain','folder'),
    h('span',null,done+' / '+list.length+' tâches terminées'),
    meter(done,list.length));
@@ -150,6 +164,7 @@ function taskDetails(task){
   ['Fin de la récurrence',task.recurrenceEndDate?new Date(task.recurrenceEndDate+'T12:00:00').toLocaleDateString('fr-FR'):'Sans date de fin']
  ];
  return h('div',{className:'taskdetails'},
+  !isArchived(task.project,db.projects)&&h('label',{className:'detailstatus'},'Statut',h('select',{value:task.status,disabled:cloud.locked,'aria-label':'Modifier le statut de '+task.title,onChange:event=>changeTaskStatus(task,event.target.value)},status.map((label,index)=>h('option',{key:index,value:index},label)))),
   h('h3',{className:'detailtitle'},task.title),
   task._virtual&&h('p',{className:'periodnote'},'Occurrence prévue de la série. Vous pouvez la déplacer depuis le calendrier, ou modifier la série avec le bouton ci-dessous.'),
   h('dl',{className:'detailfields'},fields.map(([label,value])=>h('div',{key:label},h('dt',null,label),h('dd',null,value)))),
@@ -171,20 +186,20 @@ async function submit(e){e.preventDefault();let {kind,...obj}=modal;let field=ki
 }
  let key=kind==='task'?'tasks':'projects';let list=obj.id?db[key].map(x=>x.id===obj.id?obj:x):[...db[key],{...obj,id:uid(),...(kind==='task'?{status:0,date:null}:{})}];if(await commit({...db,[key]:list}))M(null)}
 function meter(v,max){return h('progress',{value:v,max:max||1,'aria-label':'Progression'})}
-function statsRow(x,clickable=false){const list=tasks.filter(t=>belongs(t,x.id)),done=list.filter(t=>t.status===2).length;return h(clickable?'button':'div',{className:'statrow'+(clickable?' projectstat':''),key:x.id,...(clickable?{type:'button',onClick:()=>openProject(x)}:{})},h('strong',null,x.name),h('span',null,list.length?done+' / '+list.length+' · '+Math.round(100*done/list.length)+' %':'Aucune tâche'),meter(done,list.length))}
+function statsRow(x,clickable=false){const list=tasks.filter(t=>belongs(t,x.id)),done=list.filter(t=>t.status===2).length;return h(clickable?'button':'div',{className:'statrow projectcolored'+(clickable?' projectstat':''),style:projectStyle(x.id,db.projects),key:x.id,...(clickable?{type:'button',onClick:()=>openProject(x)}:{})},h('strong',null,x.name),h('span',null,list.length?done+' / '+list.length+' · '+Math.round(100*done/list.length)+' %':'Aucune tâche'),meter(done,list.length))}
 const pic=['circle','clock','check'];const nav=['Tableau de bord','Calendrier','Statistiques','Journal','Archives'];
-return h(R.Fragment,null,h('header',null,h('div',{className:'head'},h('b',{className:'brand'},icon('compass',30),'Log Pose'),h('nav',null,nav.map((v,i)=>btn(v,()=>{T(i);F('');M(null)},tab===i?'active':'',['board','calendar','stats','clock','folder'][i]))),h('button',{type:'button',className:'avatar accountavatar',title:'Compte et synchronisation','aria-label':'Ouvrir le compte et la synchronisation','aria-haspopup':'dialog',onClick:()=>M({kind:'account'})},h('img',{src:'luffy-avatar.svg?v=20261110-6',alt:'Luffy',width:44,height:44})))),
+return h(R.Fragment,null,h('header',null,h('div',{className:'head'},h('b',{className:'brand'},icon('compass',30),'Log Pose'),h('nav',null,nav.map((v,i)=>btn(v,()=>{T(i);F('');M(null)},tab===i?'active':'',['board','calendar','stats','clock','folder'][i]))),h('button',{type:'button',className:'avatar accountavatar',title:'Compte et synchronisation','aria-label':'Ouvrir le compte et la synchronisation','aria-haspopup':'dialog',onClick:()=>M({kind:'account'})},h('img',{src:'luffy-avatar.svg?v=20261110-7',alt:'Luffy',width:44,height:44})))),
 h('main',null,h('button',{type:'button',className:'accountnotice',onClick:()=>M({kind:'account'})},cloud.label||'Compte et synchronisation',' · Gérer mon compte'),h('fieldset',{disabled:cloud.locked,className:'workspace'},h('div',{className:'intro'},h('div',null,h('small',null,'CARNET DE NAVIGATION'),h('h1',null,nav[tab])),tab!==1&&tab!==2&&h('div',{className:'switch'},spaces.map((v,i)=>btn(v,()=>{commit({...db,space:v});F('')},db.space===v?'chosen':'',i?'case':'person')))),
-h('section',{className:'hero clickable',role:'button',tabIndex:0,'aria-label':'Voir ma progression RPG',onClick:openRpg,onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openRpg()}}},h(Sea),h('div',{className:'badge'},icon('anchor',42)),h('div',{className:'profile'},h('small',null,'PROFIL RPG'),h('h2',null,p.grade),h('div',{className:'level'},h('b',null,'Niveau '+p.level),' · '+p.title),h('div',{className:'xp'},h('span',null,'Expérience'),h('b',null,p.level===50?'Niveau maximum':p.xp+' / '+p.level*100+' XP')),meter(p.level===50?1:p.xp,p.level===50?1:p.level*100)) ),
+h('section',{className:'hero clickable'+(xpGain?' xp-earned':''),role:'button',tabIndex:0,'aria-label':'Voir ma progression RPG',onClick:openRpg,onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openRpg()}}},h(Sea),xpGain&&h('span',{key:xpGain.id,className:'xpgain',role:'status','aria-live':'polite'},'+'+xpGain.amount+' XP'),h('div',{className:'badge'},icon('anchor',42)),h('div',{className:'profile'},h('small',null,'PROFIL RPG'),h('h2',null,p.grade),h('div',{className:'level'},h('b',null,'Niveau '+p.level),' · '+p.title),h('div',{className:'xp'},h('span',null,'Expérience'),h('b',null,p.level===50?'Niveau maximum':p.xp+' / '+p.level*100+' XP')),meter(p.level===50?1:p.xp,p.level===50?1:p.level*100)) ),
 tab===1?h(Calendar,{
  tasks:db.tasks.filter(task=>!isArchived(task.project,db.projects)),
  recurrenceSkips:db.recurrenceSkips||[],
  onOpen:task=>M({...task,kind:'detail'}),
  onReschedule:task=>commit(materializeOccurrence(db,task))
-}):tab===3?activityView():tab===4?archiveView():tab===0?h(R.Fragment,null,h('div',{className:'sectiontitle'},h('h2',null,'Mes projets ',h('em',null,roots.length)),btn('Créer un projet',()=>formProject(),'outline','plus')),h('div',{className:'projects'},roots.length?roots.map(x=>h('div',{className:'project '+(parent===x.id?'selected':''),key:x.id,onClick:e=>{if(!e.target.closest('button'))openProject(x)}},btn(x.name,()=>openProject(x),'plain','folder'),btn('Renommer',()=>formProject('',x),'mini'),statsRow({...x,name:''}))):h('div',{className:'emptyproject'},h('i',null,icon('folder',29)),h('div',null,h('strong',null,'Aucun projet pour le moment'),h('p',null,'Créez un projet pour regrouper vos tâches.')))),
-parent&&h('div',{className:'subs'},btn(projectName(parent),()=>openProject(projects.find(x=>x.id===parent))),projects.filter(x=>x.parent===parent).map(x=>btn(x.name,()=>openProject(x),filter===x.id?'chosen':'')),btn('Sous-projet',()=>formProject(parent),'','plus'),selected?.parent&&btn('Renommer',()=>formProject(parent,selected))),
+}):tab===3?activityView():tab===4?archiveView():tab===0?h(R.Fragment,null,h('div',{className:'sectiontitle'},h('h2',null,'Mes projets ',h('em',null,roots.length)),btn('Créer un projet',()=>formProject(),'outline','plus')),h('div',{className:'projects'},roots.length?roots.map(x=>h('div',{className:'project projectcolored '+(parent===x.id?'selected':''),style:projectStyle(x.id,db.projects),key:x.id,onClick:e=>{if(!e.target.closest('button'))openProject(x)}},btn(x.name,()=>openProject(x),'plain','folder'),btn('Renommer',()=>formProject('',x),'mini'),statsRow({...x,name:''}))):h('div',{className:'emptyproject'},h('i',null,icon('folder',29)),h('div',null,h('strong',null,'Aucun projet pour le moment'),h('p',null,'Créez un projet pour regrouper vos tâches.')))),
+parent&&h('div',{className:'subs'},btn(projectName(parent),()=>openProject(projects.find(x=>x.id===parent))),projects.filter(x=>x.parent===parent).map(x=>btn(x.name,()=>openProject(x),filter===x.id?'chosen projectcolored':'projectcolored',undefined,projectStyle(x.id,db.projects))),btn('Sous-projet',()=>formProject(parent),'','plus'),selected?.parent&&btn('Renommer',()=>formProject(parent,selected))),
 h('div',{className:'sectiontitle boardtitle'},h('h2',null,'Tableau Kanban'),h('div',{className:'actions'},sel(filter,F,[['','Toutes les tâches'],...projects.filter(x=>!isArchived(x.id,db.projects)).map(x=>[x.id,(x.parent?'↳ ':'')+x.name])],'Filtrer par projet'),btn('Nouvelle tâche',()=>formTask(),'primary','plus'))),
-h('div',{className:'kanban'},status.map((name,i)=>{const list=visible.filter(t=>t.status===i);return h('section',{className:'column c'+i,key:name,onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault();commit({...db,tasks:move(db.tasks,e.dataTransfer.getData('text/plain'),i)})}},h('h3',null,icon(pic[i]),name,h('em',null,list.length)),list.length?list.map(t=>h('article',{key:t.id,draggable:true,className:'taskcard',onClick:e=>{
+h('div',{className:'kanban'},status.map((name,i)=>{const list=visible.filter(t=>t.status===i);return h('section',{className:'column c'+i,key:name,onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault();commit({...db,tasks:move(db.tasks,e.dataTransfer.getData('text/plain'),i)})}},h('h3',null,icon(pic[i]),name,h('em',null,list.length)),list.length?list.map(t=>h('article',{key:t.id,draggable:true,className:'taskcard projectcolored'+(t.status===2?' completed':''),style:projectStyle(t.project,db.projects),onClick:e=>{
  if(!e.target.closest('button,select,option'))M({...t,kind:'detail'});
 },onDragStart:e=>e.dataTransfer.setData('text/plain',t.id)},btn(t.title,()=>M({...t,kind:'detail'}),'tasktitle'),h('p',null,projectName(t.project)),t.dueDate&&h('p',{className:'scheduledtag'},new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR')+(t.startTime?' · '+t.startTime+'–'+t.endTime:'')),t.recurrence&&t.recurrence!=='none'&&h('p',{className:'recurrencetag'},'↻ '+recurrenceLabels[t.recurrence]+(t.dueDate?' · '+new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'')),h('div',{className:'taskmeta'},h('label',null,t.priority),sel(t.status,v=>commit({...db,tasks:move(db.tasks,t.id,+v)}),status.map((s,i)=>[i,s]),'Statut de '+t.title)))):h('div',{className:'void'},icon(pic[i],25),h('p',null,['Aucune tâche à faire','Aucune tâche en cours','Aucune tâche terminée'][i]),i===0&&btn('Ajouter une tâche',()=>formTask(),'link','plus'))) }))) :
 h('section',{className:'analytics'},h('div',{className:'sectiontitle'},h('h2',null,'Avancée des projets'),h(ProjectFilter,{projects,value:filter,onChange:F})),h('div',{className:'metrics'},[[(visible.length?Math.round(100*visible.filter(t=>t.status===2).length/visible.length):0)+' %','Taux de complétion'],[visible.length,'Tâches au total']].map(([n,l])=>h('section',null,h('b',null,n),h('p',null,l)))),h(TaskStatistics,{tasks:completions(db,undefined,filter),projects,globalTasks:completions(db,undefined,filter),globalProjects:db.projects}),h('h3',null,'Répartition par statut'),status.map((s,i)=>{let n=visible.filter(t=>t.status===i).length;return h('div',{className:'statrow'},s,h('span',null,n),meter(n,visible.length))}),h('h3',null,'Projets et sous-projets'),projectStatistics(),!projects.length&&h('p',null,'Aucun projet pour le moment.'))),

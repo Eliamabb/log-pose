@@ -1,3 +1,4 @@
+import {projectColor} from './project-colors.mjs?v=20261110-7';
 import {React as R} from './react.js';
 import {completionMetrics,weeklyCompletions,completedGroups} from './statistics-data.mjs';
 const h=R.createElement;
@@ -11,13 +12,13 @@ export function TaskStatistics({tasks,projects,globalTasks=tasks,globalProjects=
  const [now,setNow]=R.useState(()=>new Date());
  R.useEffect(()=>{const timer=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(timer)},[]);
  const metrics=completionMetrics(tasks,now),weeks=weeklyCompletions(tasks,now);
- const groups=completedGroups(globalTasks,globalProjects.map(project=>({...project,name:project.name+' · '+project.space})),'projects'),total=groups.reduce((sum,group)=>sum+group.count,0);
+ const groups=completedGroups(globalTasks,globalProjects.map(project=>({...project,name:project.name+' · '+project.space})),'subprojects'),total=groups.reduce((sum,group)=>sum+group.count,0);
  const maximum=Math.max(1,...weeks.map(week=>week.count)),top=Math.max(1,Math.ceil(maximum/4)*4);
  const ticks=[0,top/4,top/2,top*3/4,top].filter(Number.isInteger);
  let angle=-Math.PI/2;
  const slices=groups.map((group,index)=>{
   const start=angle;angle+=2*Math.PI*group.count/total;
-  return {...group,start,end:angle,color:'hsl('+Math.round(index*137.508%360)+' 64% 66%)'};
+  return {...group,start,end:angle,color:projectColor(group.id,globalProjects)};
  });
  return h('div',{className:'taskstatistics'},
   h('div',{className:'metrics completionmetrics'},[
@@ -46,7 +47,7 @@ export function TaskStatistics({tasks,projects,globalTasks=tasks,globalProjects=
      h('tbody',null,weeks.map(week=>h('tr',{key:week.start.toISOString()},h('td',null,week.start.toLocaleDateString('fr-FR')),h('td',null,week.count))))))),
   h('section',{className:'chartpanel'},
    h('h3',null,'Répartition globale des réalisations par projet'),
-   h('p',null,'Personnel et Professionnel · toutes les dates · filtre de projet sélectionné. Les sous-projets sont regroupés avec leur parent.'),
+   h('p',null,'Personnel et Professionnel · toutes les dates · filtre de projet sélectionné. Les sous-projets reprennent une nuance de leur projet parent ; les tâches directes du parent ont leur propre part.'),
    h('p',{className:'periodnote'},total+' réalisation(s) au total'),
    total?h('div',{className:'piecontent'},
     h('svg',{viewBox:'0 0 200 200',className:'piechart',role:'img','aria-label':'Répartition de '+total+' tâches terminées. Les catégories et pourcentages figurent dans la légende.'},
