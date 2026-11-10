@@ -33,11 +33,14 @@ export function nextDue(task,now=new Date()){
   }else date.setDate(date.getDate()+(task.recurrence==='weekly'?7:1));
  }while(date<=today);
  const formatted=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+ if(task.recurrenceEndDate&&formatted>task.recurrenceEndDate)return null;
  return {dueDate:formatted,recurrenceDay:anchor};
 }
 export function recordChanges(before,next,now=Date.now()){
  const original=normalize(before);
- const activities=[...(next.activityVersion===1?next.activities:original.activities)];
+ const removedProjects=new Set(before.projects.filter(project=>!next.projects.some(item=>item.id===project.id)).map(project=>project.id));
+ const activities=[...(next.activityVersion===1?next.activities:original.activities)]
+  .filter(event=>!removedProjects.has(event.projectId)&&!removedProjects.has(event.rootProjectId));
  let tasks=next.tasks.map(task=>({...task}));
  const byId=new Map(before.tasks.map(task=>[task.id,task]));
  for(const task of tasks){
@@ -45,18 +48,19 @@ export function recordChanges(before,next,now=Date.now()){
   if(task.status===2&&old?.status!==2){
    task.date=now;
    activities.push({id:uuid(),action:'completed',timestamp:now,...snapshot(task,next.projects)});
-   if(['daily','weekly','monthly'].includes(task.recurrence)&&!task.nextTaskId){
+   const schedule=['daily','weekly','monthly'].includes(task.recurrence)&&!task.nextTaskId?nextDue(task,new Date(now)):null;
+   if(schedule){
     const nextId=uuid();
     task.nextTaskId=nextId;
     const {nextTaskId,date,...template}=task;
-    tasks.push({...template,id:nextId,status:0,date:null,...nextDue(task,new Date(now))});
+    tasks.push({...template,id:nextId,status:0,date:null,...schedule});
    }
   }else if(old?.status===2&&task.status!==2){
    activities.push({id:uuid(),action:'reopened',timestamp:now,...snapshot(old,before.projects)});
   }
  }
  const ids=new Set(next.tasks.map(task=>task.id));
- for(const task of before.tasks)if(!ids.has(task.id))activities.push({id:uuid(),action:'deleted',timestamp:now,...snapshot(task,before.projects)});
+ for(const task of before.tasks)if(!ids.has(task.id)&&!removedProjects.has(task.project))activities.push({id:uuid(),action:'deleted',timestamp:now,...snapshot(task,before.projects)});
  return {...next,tasks,activities,activityVersion:1};
 }
 export function archiveProject(data,id,archived,now=Date.now()){
@@ -69,7 +73,17 @@ export function archiveProject(data,id,archived,now=Date.now()){
  return {...state,projects:state.projects.map(item=>item.id===id?{...item,archived}:item),
   activities:[...state.activities,{id:uuid(),action:archived?'archived':'restored',timestamp:now,space:project.space,title:project.name,projectId:id,projectName:project.name,rootProjectId:project.parent||id,rootProjectName:state.projects.find(item=>item.id===project.parent)?.name||project.name}]};
 }
+export function deleteProject(data,id){
+ const state=normalize(data);
+ if(!state.projects.some(project=>project.id===id))throw Error('Projet introuvable.');
+ const removed=new Set([id,...state.projects.filter(project=>project.parent===id).map(project=>project.id)]);
+ return {...state,
+  projects:state.projects.filter(project=>!removed.has(project.id)),
+  tasks:state.tasks.filter(task=>!removed.has(task.project)),
+  activities:state.activities.filter(event=>!removed.has(event.projectId)&&!removed.has(event.rootProjectId))
+ };
+}
 export function completions(data,space,filter=''){
- return normalize(data).activities.filter(event=>event.action==='completed'&&event.space===space&&(!filter||event.projectId===filter||event.rootProjectId===filter))
+ return normalize(data).activities.filter(event=>event.action==='completed'&&(!space||event.space===space)&&(!filter||event.projectId===filter||event.rootProjectId===filter))
   .map(event=>({id:event.id,status:2,date:event.timestamp,project:event.projectId,title:event.title,historicalProjectName:event.projectName,historicalRootId:event.rootProjectId,historicalRootName:event.rootProjectName}));
 }

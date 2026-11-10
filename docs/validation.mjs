@@ -20,5 +20,9 @@ export function valid(data){
  if(t.recurrence!==undefined&&!['none','daily','weekly','monthly'].includes(t.recurrence))return false;
  if(t.recurrenceDay!=null&&(!Number.isInteger(t.recurrenceDay)||t.recurrenceDay<1||t.recurrenceDay>31))return false;
  if(t.dueDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate)||new Date(t.dueDate+'T12:00:00').getDate()!==Number(t.dueDate.slice(-2))))return false;
+ if(t.recurrenceEndDate){
+  if(typeof t.recurrenceEndDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(t.recurrenceEndDate)||new Date(t.recurrenceEndDate+'T12:00:00').getDate()!==Number(t.recurrenceEndDate.slice(-2)))return false;
+  if(t.dueDate&&t.recurrenceEndDate<t.dueDate)return false;
+ }
  return typeof t.id==='string'&&typeof t.title==='string'&&t.title.trim()&&(!t.description||typeof t.description==='string')&&['Basse','Moyenne','Haute'].includes(t.priority)&&[0,1,2].includes(t.status)&&['Personnel','Professionnel'].includes(t.space)&&(!t.project||data.projects.some(p=>p.id===t.project&&p.space===t.space))});
 }

@@ -1,6 +1,6 @@
-import {recordChanges,archiveProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs';
-import {TaskStatistics} from './statistics.js';
-import {useCloud} from './sync.js';
+import {recordChanges,archiveProject,deleteProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs?v=20261110-3';
+import {TaskStatistics} from './statistics.js?v=20261110-3';
+import {useCloud} from './sync.js?v=20261110-3';
 import {React as R,DOM} from './react.js';import {draw} from './sea.js';import {profile,move,status,priorities,grades,restore,save,empty} from './model.mjs';
 const h=R.createElement,S=R.useState,spaces=['Personnel','Professionnel'],uid=()=>crypto.randomUUID();
 const paths={compass:'M12 2 15 9 22 12 15 15 12 22 9 15 2 12 9 9Z M12 5v7l-6 0 M12 12l6 0-6 7Z',board:'M3 5h18v14H3z M9 5v14 M15 5v14',stats:'M3 20h18 M6 16v-5 M12 16V4 M18 16V8',folder:'M2 7V5h7l2 3h11v12H2z',plus:'M12 5v14 M5 12h14',anchor:'M12 8v13 M9 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M3 13q0 7 9 8 9-1 9-8 M3 16v-3h3 M18 13h3v3',person:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M4 21q0-8 8-8t8 8',case:'M3 7h18v13H3z M8 7V4h8v3 M3 12q9 4 18 0',circle:'M12 3a9 9 0 1 0 .01 0',clock:'M12 3a9 9 0 1 0 .01 0 M12 7v5l4 2',check:'M12 3a9 9 0 1 0 .01 0 M8 12l3 3 5-6',edit:'m4 16 12-12 4 4L8 20H4z',layers:'m12 3 10 5-10 5L2 8z M2 12l10 5 10-5 M2 16l10 5 10-5'};
@@ -24,6 +24,14 @@ async function toggleArchive(project){
  try{
   if(await commit(archiveProject(db,project.id,!project.archived))){F('');M(null)}
  }catch(error){window.alert(error.message)}
+}
+async function removeProject(project){
+ const next=deleteProject(db,project.id);
+ const projectsRemoved=db.projects.length-next.projects.length;
+ const tasksRemoved=db.tasks.length-next.tasks.length;
+ const activitiesRemoved=normalize(db).activities.length-next.activities.length;
+ const confirmed=window.confirm('Supprimer définitivement « '+project.name+' » ? Cela supprimera '+projectsRemoved+' projet(s) ou sous-projet(s), '+tasksRemoved+' tâche(s) et '+activitiesRemoved+' entrée(s) du journal. Les statistiques et l’XP seront recalculées. Exportez une sauvegarde si vous souhaitez pouvoir les restaurer.');
+ if(confirmed&&await commit(next)){F('');M(null)}
 }
 function archiveView(){
  const archived=projects.filter(project=>project.archived&&!projects.find(parent=>parent.id===project.parent)?.archived);
@@ -103,7 +111,8 @@ function projectTree(){
   h('div',{className:'treechildren'},children.map(project=>node(project,true))),
   !root.parent&&!children.length&&h('p',null,'Aucun sous-projet pour le moment.'),projectTasks(root),
   h('div',{className:'actions'},btn('Voir les tâches du projet',()=>{F(root.id);M(null)},'primary'),!isArchived(root.id,db.projects)&&!root.parent&&btn('Créer un sous-projet',()=>formProject(root.id),'outline','plus'),
-   btn(root.archived?'Restaurer le projet':'Archiver le projet',()=>toggleArchive(root),'outline'))
+   btn(root.archived?'Restaurer le projet':'Archiver le projet',()=>toggleArchive(root),'outline'),
+   btn(root.parent?'Supprimer le sous-projet':'Supprimer le projet',()=>removeProject(root),'danger'))
  );
 }
 function projectStatistics(){
@@ -126,7 +135,8 @@ function taskDetails(task){
   ['Projet',mainProject?.name||'Aucun projet'],
   ['Sous-projet',linked?.parent?linked.name:'Aucun sous-projet'],
   ['Récurrence',recurrenceLabels[task.recurrence||'none']],
-  ['Prochaine date prévue',task.dueDate?new Date(task.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'Non définie']
+  ['Prochaine date prévue',task.dueDate?new Date(task.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'Non définie'],
+  ['Fin de la récurrence',task.recurrenceEndDate?new Date(task.recurrenceEndDate+'T12:00:00').toLocaleDateString('fr-FR'):'Sans date de fin']
  ];
  return h('div',{className:'taskdetails'},
   h('h3',{className:'detailtitle'},task.title),
@@ -135,11 +145,13 @@ function taskDetails(task){
   h('p',{className:'description'},task.description?.trim()?task.description:'Aucune description')
  );
 }
-function formTask(t){M({kind:'task',title:'',description:'',space:db.space,project:filter,priority:'Moyenne',recurrence:'none',dueDate:'',...t})}
+function formTask(t){M({kind:'task',title:'',description:'',space:db.space,project:filter,priority:'Moyenne',recurrence:'none',dueDate:'',recurrenceEndDate:'',...t})}
 function formProject(parent='',existing){M({kind:'project',name:'',space:db.space,parent,...existing})}
 function update(key,v){M({...modal,[key]:v,...(key==='space'?{project:''}:{})})}
 async function submit(e){e.preventDefault();let {kind,...obj}=modal;let field=kind==='task'?'title':'name';obj[field]=obj[field].trim();if(!obj[field])return;if(kind==='task'){
  if(obj.recurrence&&obj.recurrence!=='none'&&!obj.dueDate){window.alert('Choisissez la date de la première occurrence.');return}
+ if(obj.recurrence!=='none'&&obj.recurrenceEndDate&&obj.dueDate>obj.recurrenceEndDate){window.alert('La fin de récurrence doit être égale ou postérieure à la date prévue.');return}
+ if(obj.recurrence==='none')obj.recurrenceEndDate='';
  const previous=db.tasks.find(task=>task.id===obj.id);
  if(obj.dueDate!==previous?.dueDate)obj.recurrenceDay=obj.dueDate?Number(obj.dueDate.slice(-2)):null;
 }
@@ -156,8 +168,9 @@ h('div',{className:'sectiontitle boardtitle'},h('h2',null,'Tableau Kanban'),h('d
 h('div',{className:'kanban'},status.map((name,i)=>{const list=visible.filter(t=>t.status===i);return h('section',{className:'column c'+i,key:name,onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault();commit({...db,tasks:move(db.tasks,e.dataTransfer.getData('text/plain'),i)})}},h('h3',null,icon(pic[i]),name,h('em',null,list.length)),list.length?list.map(t=>h('article',{key:t.id,draggable:true,className:'taskcard',onClick:e=>{
  if(!e.target.closest('button,select,option'))M({...t,kind:'detail'});
 },onDragStart:e=>e.dataTransfer.setData('text/plain',t.id)},btn(t.title,()=>M({...t,kind:'detail'}),'tasktitle'),h('p',null,projectName(t.project)),t.recurrence&&t.recurrence!=='none'&&h('p',{className:'recurrencetag'},'↻ '+recurrenceLabels[t.recurrence]+(t.dueDate?' · '+new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'')),h('div',{className:'taskmeta'},h('label',null,t.priority),sel(t.status,v=>commit({...db,tasks:move(db.tasks,t.id,+v)}),status.map((s,i)=>[i,s]),'Statut de '+t.title)))):h('div',{className:'void'},icon(pic[i],25),h('p',null,['Aucune tâche à faire','Aucune tâche en cours','Aucune tâche terminée'][i]),i===0&&btn('Ajouter une tâche',()=>formTask(),'link','plus'))) }))) :
-h('section',{className:'analytics'},h('div',{className:'sectiontitle'},h('h2',null,'Avancée des projets'),sel(filter,F,[['','Tout l’espace'],...projects.map(x=>[x.id,x.name])],'Périmètre')),h('div',{className:'metrics'},[[(visible.length?Math.round(100*visible.filter(t=>t.status===2).length/visible.length):0)+' %','Taux de complétion'],[visible.length,'Tâches au total']].map(([n,l])=>h('section',null,h('b',null,n),h('p',null,l)))),h(TaskStatistics,{tasks:completions(db,db.space,filter),projects}),h('h3',null,'Répartition par statut'),status.map((s,i)=>{let n=visible.filter(t=>t.status===i).length;return h('div',{className:'statrow'},s,h('span',null,n),meter(n,visible.length))}),h('h3',null,'Projets et sous-projets'),projectStatistics(),!projects.length&&h('p',null,'Aucun projet pour le moment.'))),
+h('section',{className:'analytics'},h('div',{className:'sectiontitle'},h('h2',null,'Avancée des projets'),sel(filter,F,[['','Tout l’espace'],...projects.map(x=>[x.id,x.name])],'Périmètre')),h('div',{className:'metrics'},[[(visible.length?Math.round(100*visible.filter(t=>t.status===2).length/visible.length):0)+' %','Taux de complétion'],[visible.length,'Tâches au total']].map(([n,l])=>h('section',null,h('b',null,n),h('p',null,l)))),h(TaskStatistics,{tasks:completions(db,db.space,filter),projects,globalTasks:completions(db),globalProjects:db.projects}),h('h3',null,'Répartition par statut'),status.map((s,i)=>{let n=visible.filter(t=>t.status===i).length;return h('div',{className:'statrow'},s,h('span',null,n),meter(n,visible.length))}),h('h3',null,'Projets et sous-projets'),projectStatistics(),!projects.length&&h('p',null,'Aucun projet pour le moment.'))),
 ),modal&&h('dialog',{ref:dialog,'aria-label':modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':'Formulaire',onCancel:()=>M(null)},h('div',{className:'sectiontitle'},h('h2',null,modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':modal.id?'Modifier '+(modal.kind==='task'?'la tâche':'le projet'):modal.kind==='task'?'Nouvelle tâche':modal.parent?'Nouveau sous-projet':'Nouveau projet'),btn('Fermer',()=>M(null),'mini')),modal.kind==='rpg'?rpgDetails():modal.kind==='tree'?projectTree():modal.kind==='detail'?h('div',null,taskDetails(modal),!isArchived(modal.project,db.projects)&&h('div',{className:'actions'},btn('Modifier',()=>formTask({...modal,kind:'task'}),'primary'),btn('Supprimer',async()=>{if(await commit({...db,tasks:db.tasks.filter(t=>t.id!==modal.id)}))M(null)}))):h('form',{onSubmit:submit},h('label',null,modal.kind==='task'?'Titre':'Nom',h('input',{autoFocus:true,required:true,value:modal.title??modal.name,onChange:e=>update(modal.kind==='task'?'title':'name',e.target.value)})),modal.kind==='task'&&h(R.Fragment,null,h('label',null,'Description',h('textarea',{rows:4,value:modal.description,onChange:e=>update('description',e.target.value)})),h('label',null,'Récurrence',sel(modal.recurrence||'none',v=>update('recurrence',v),Object.entries(recurrenceLabels),'Récurrence')),
  modal.recurrence&&modal.recurrence!=='none'&&h('label',null,'Date prévue',h('input',{type:'date',required:true,value:modal.dueDate||'',onChange:event=>update('dueDate',event.target.value)})),
+ modal.recurrence&&modal.recurrence!=='none'&&h('label',null,'Fin de récurrence (facultative, date incluse)',h('input',{type:'date',min:modal.dueDate||undefined,value:modal.recurrenceEndDate||'',onChange:event=>update('recurrenceEndDate',event.target.value)})),
  [['Priorité','priority',Object.keys(priorities).map(s=>[s,s])],['Espace','space',spaces.map(s=>[s,s])],['Projet ou sous-projet','project',[['','Tâche indépendante'],...db.projects.filter(x=>x.space===modal.space&&!isArchived(x.id,db.projects)).map(x=>[x.id,(x.parent?(db.projects.find(y=>y.id===x.parent)?.name+' › '):'')+x.name])]]].map(([l,k,opts])=>h('label',null,l,sel(modal[k],v=>update(k,v),opts,l)))),h('button',{className:'primary'},'Enregistrer'))),notice&&h('aside',{role:'status'},notice))}
 DOM.createRoot(document.querySelector('#root')).render(h(App));

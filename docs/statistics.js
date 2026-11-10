@@ -7,11 +7,11 @@ function slicePath(start,end){
  const [sx,sy]=polar(100,100,84,start),[ex,ey]=polar(100,100,84,end);
  return 'M100 100 L'+sx+' '+sy+' A84 84 0 '+(end-start>Math.PI?1:0)+' 1 '+ex+' '+ey+' Z';
 }
-export function TaskStatistics({tasks,projects}){
- const [mode,setMode]=R.useState('projects'),[now,setNow]=R.useState(()=>new Date());
+export function TaskStatistics({tasks,projects,globalTasks=tasks,globalProjects=projects}){
+ const [now,setNow]=R.useState(()=>new Date());
  R.useEffect(()=>{const timer=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(timer)},[]);
  const metrics=completionMetrics(tasks,now),weeks=weeklyCompletions(tasks,now);
- const groups=completedGroups(tasks,projects,mode),total=groups.reduce((sum,group)=>sum+group.count,0);
+ const groups=completedGroups(globalTasks,globalProjects.map(project=>({...project,name:project.name+' · '+project.space})),'projects'),total=groups.reduce((sum,group)=>sum+group.count,0);
  const maximum=Math.max(1,...weeks.map(week=>week.count)),top=Math.max(1,Math.ceil(maximum/4)*4);
  const ticks=[0,top/4,top/2,top*3/4,top].filter(Number.isInteger);
  let angle=-Math.PI/2;
@@ -45,11 +45,9 @@ export function TaskStatistics({tasks,projects}){
     h('table',null,h('thead',null,h('tr',null,h('th',null,'Semaine du'),h('th',null,'Tâches terminées'))),
      h('tbody',null,weeks.map(week=>h('tr',{key:week.start.toISOString()},h('td',null,week.start.toLocaleDateString('fr-FR')),h('td',null,week.count))))))),
   h('section',{className:'chartpanel'},
-   h('div',{className:'sectiontitle'},h('h3',null,'Répartition des tâches réalisées'),
-    h('select',{'aria-label':'Regrouper les tâches réalisées',value:mode,onChange:event=>setMode(event.target.value)},
-     h('option',{value:'projects'},'Par projet'),
-     h('option',{value:'subprojects'},'Par sous-projet'))),
-   h('p',null,'Réalisations conservées dans le journal pour le périmètre sélectionné'),
+   h('h3',null,'Répartition globale des réalisations par projet'),
+   h('p',null,'Tous les projets · Personnel et Professionnel · toutes les dates. Les sous-projets sont regroupés avec leur parent.'),
+   h('p',{className:'periodnote'},total+' réalisation(s) au total'),
    total?h('div',{className:'piecontent'},
     h('svg',{viewBox:'0 0 200 200',className:'piechart',role:'img','aria-label':'Répartition de '+total+' tâches terminées. Les catégories et pourcentages figurent dans la légende.'},
      slices.map(group=>groups.length===1?
@@ -59,7 +57,6 @@ export function TaskStatistics({tasks,projects}){
      h('span',{className:'colorswatch',style:{backgroundColor:group.color},'aria-hidden':true}),
      h('span',null,group.label),
      h('b',null,group.count+' · '+(100*group.count/total).toLocaleString('fr-FR',{maximumFractionDigits:1})+' %'))))):
-    h('p',{className:'chartempty'},'Terminez une tâche pour afficher sa répartition.'),
-   mode==='subprojects'&&h('p',{className:'periodnote'},'Chaque sous-projet est distingué. Les tâches rattachées directement à un projet et celles sans projet ont leur propre catégorie.'))
+    h('p',{className:'chartempty'},'Terminez une tâche pour afficher sa répartition.'))
  );
 }
