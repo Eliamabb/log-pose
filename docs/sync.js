@@ -1,3 +1,4 @@
+import {normalize} from './activity.mjs';
 import {Login} from './login.js';
 import {React as R} from './react.js';
 import {empty,restore} from './model.mjs';
@@ -45,6 +46,7 @@ export function useCloud(setData){
   return()=>{stopped=true;unsubscribe?.();current.current.generation++;current.current.unsubscribe?.()};
  },[]);
  async function persist(data,retry=false){
+  if(data)data=normalize(data);
   const session=current.current;
   if(session.busy||!session.user)return false;
   try{encode(data)}catch(error){window.alert(message(error));return false}
@@ -89,7 +91,10 @@ export function useCloud(setData){
   }catch(error){setState(s=>({...s,phase:'loaderror',message:message(error)}))}
  }
  async function migrate(data){
-  const combined={...data,projects:[...data.projects],tasks:[...data.tasks]};
+  const legacy=normalize(local.current);
+  const combined={...data,projects:[...data.projects],tasks:[...data.tasks],activities:[...(data.activities||[])]};
+  const eventIds=new Set(combined.activities.map(event=>event.id));
+  for(const event of legacy.activities)if(!eventIds.has(event.id))combined.activities.push(event);
   for(const key of ['projects','tasks']){
    const ids=new Set(combined[key].map(item=>item.id));
    for(const item of local.current[key])if(!ids.has(item.id))combined[key].push(item);
