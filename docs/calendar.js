@@ -1,7 +1,7 @@
-import {TimeSelect} from './ui-controls.js?v=20261110-6';
-import {projectOccurrences} from './recurrence.mjs?v=20261110-6';
+import {TimeSelect} from './ui-controls.js?v=20261110-8';
+import {projectOccurrences} from './recurrence.mjs?v=20261110-8';
 import {React as R} from './react.js';
-import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-6';
+import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-8';
 const h=R.createElement;
 const weekdays=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const dateLabel=date=>date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});

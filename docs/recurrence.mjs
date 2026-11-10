@@ -1,4 +1,4 @@
-import {dateKey,parseDay} from './calendar-data.mjs?v=20261110-6';
+import {dateKey,parseDay} from './calendar-data.mjs?v=20261110-8';
 const frequencies=new Set(['daily','weekly','monthly']);
 export function seriesKeys(tasks){
  const byId=new Map(tasks.map(task=>[task.id,task]));

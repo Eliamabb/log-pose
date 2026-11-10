@@ -1,4 +1,4 @@
-import {validSchedule} from './calendar-data.mjs?v=20261110-5';
+import {validSchedule} from './calendar-data.mjs?v=20261110-8';
 export function valid(data){
  if(!data||!['Personnel','Professionnel'].includes(data.space)||!Array.isArray(data.tasks)||!Array.isArray(data.projects))return false;
  if(data.tasks.length>20000||data.projects.length>2000)return false;

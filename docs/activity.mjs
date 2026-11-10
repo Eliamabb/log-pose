@@ -1,4 +1,5 @@
-import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-5';
+import {uniqueCompletions} from './task-retention.mjs?v=20261110-8';
+import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-8';
 export const recurrenceLabels={none:'Aucune',daily:'Tous les jours',weekly:'Toutes les semaines',monthly:'Tous les mois'};
 const uuid=()=>crypto.randomUUID();
 export function isArchived(projectId,projects){
@@ -101,6 +102,6 @@ export function deleteProject(data,id){
  };
 }
 export function completions(data,space,filter=''){
- return normalize(data).activities.filter(event=>event.action==='completed'&&(!space||event.space===space)&&(!filter||event.projectId===filter||event.rootProjectId===filter))
+ return uniqueCompletions(normalize(data).activities).filter(event=>(!space||event.space===space)&&(!filter||event.projectId===filter||event.rootProjectId===filter))
   .map(event=>({id:event.id,status:2,date:event.timestamp,project:event.projectId,title:event.title,historicalProjectName:event.projectName,historicalRootId:event.rootProjectId,historicalRootName:event.rootProjectName}));
 }
