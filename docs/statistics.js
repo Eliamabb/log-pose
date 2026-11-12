@@ -1,4 +1,4 @@
-import {projectColor} from './project-colors.mjs?v=20261110-9';
+import {projectColor} from './project-colors.mjs?v=20261113-1';
 import {React as R} from './react.js';
 import {completionMetrics,weeklyCompletions,completedGroups} from './statistics-data.mjs';
 const h=R.createElement;

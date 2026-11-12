@@ -1,15 +1,16 @@
-import {upsertEvent,deleteEvent,calendarEvents,calendarDraft} from './events.mjs?v=20261110-9';
-import {isTaskArchived} from './task-retention.mjs?v=20261110-9';
-import {prepareCompletionSound,playCompletionSound,focusRpgProfile} from './completion-feedback.mjs?v=20261110-9';
-import {projectStyle,completionXPGain} from './project-colors.mjs?v=20261110-9';
-import {TimeSelect,ProjectFilter} from './ui-controls.js?v=20261110-9';
-import {materializeOccurrence,removeOccurrence} from './recurrence.mjs?v=20261110-9';
-import {Calendar} from './calendar.js?v=20261110-9';
-import {validSchedule} from './calendar-data.mjs?v=20261110-9';
-import {recordChanges,archiveProject,deleteProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs?v=20261110-9';
-import {TaskStatistics} from './statistics.js?v=20261110-9';
-import {useCloud} from './sync.js?v=20261110-9';
-import {React as R,DOM} from './react.js';import {draw} from './sea.js';import {profile,move,status,priorities,grades,restore,save,empty} from './model.mjs';
+import {postponeTask,updateTaskSchedule} from './postpone.mjs?v=20261113-1';
+import {upsertEvent,deleteEvent,calendarEvents,calendarDraft} from './events.mjs?v=20261113-1';
+import {isTaskArchived} from './task-retention.mjs?v=20261113-1';
+import {prepareCompletionSound,playCompletionSound,focusRpgProfile} from './completion-feedback.mjs?v=20261113-1';
+import {projectStyle,completionXPGain} from './project-colors.mjs?v=20261113-1';
+import {TimeSelect,ProjectFilter} from './ui-controls.js?v=20261113-1';
+import {materializeOccurrence,removeOccurrence} from './recurrence.mjs?v=20261113-1';
+import {Calendar} from './calendar.js?v=20261113-1';
+import {validSchedule} from './calendar-data.mjs?v=20261113-1';
+import {recordChanges,archiveProject,deleteProject,isArchived,completions,normalize,recurrenceLabels} from './activity.mjs?v=20261113-1';
+import {TaskStatistics} from './statistics.js?v=20261113-1';
+import {useCloud} from './sync.js?v=20261113-1';
+import {React as R,DOM} from './react.js';import {draw} from './sea.js';import {profile,move,status,priorities,grades,restore,save,empty,totalXP} from './model.mjs?v=20261113-1';
 const h=R.createElement,S=R.useState,spaces=['Personnel','Professionnel'],uid=()=>crypto.randomUUID();
 const paths={calendar:'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2',compass:'M12 2 15 9 22 12 15 15 12 22 9 15 2 12 9 9Z M12 5v7l-6 0 M12 12l6 0-6 7Z',board:'M3 5h18v14H3z M9 5v14 M15 5v14',stats:'M3 20h18 M6 16v-5 M12 16V4 M18 16V8',folder:'M2 7V5h7l2 3h11v12H2z',plus:'M12 5v14 M5 12h14',anchor:'M12 8v13 M9 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M3 13q0 7 9 8 9-1 9-8 M3 16v-3h3 M18 13h3v3',person:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M4 21q0-8 8-8t8 8',case:'M3 7h18v13H3z M8 7V4h8v3 M3 12q9 4 18 0',circle:'M12 3a9 9 0 1 0 .01 0',clock:'M12 3a9 9 0 1 0 .01 0 M12 7v5l4 2',check:'M12 3a9 9 0 1 0 .01 0 M8 12l3 3 5-6',edit:'m4 16 12-12 4 4L8 20H4z',layers:'m12 3 10 5-10 5L2 8z M2 12l10 5 10-5 M2 16l10 5 10-5'};
 function icon(name,size=18){return h('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true},h('path',{d:paths[name]}))}
@@ -27,6 +28,8 @@ async function commit(next){
   C(Date.now());
   if(completed){playCompletionSound(audio);focusRpgProfile(profileRef.current)}
   const gain=completionXPGain(db.tasks,next.tasks);
+  const penalty=next.tasks.filter(task=>task.missedPenalty&&!db.tasks.find(old=>old.id===task.id)?.missedPenalty).length*10;
+  if(penalty){X({amount:-penalty,id:uid()});focusRpgProfile(profileRef.current);clearTimeout(xpTimer.current);xpTimer.current=setTimeout(()=>X(null),2600)}
   if(gain>0){X({amount:gain,id:uid()});clearTimeout(xpTimer.current);xpTimer.current=setTimeout(()=>X(null),2600)}
   if(b.level>a.level){N('Niveau '+b.level+' atteint ! 🎉 · '+b.grade);clearTimeout(timer.current);timer.current=setTimeout(()=>N(''),3600)}
   return true;
@@ -35,15 +38,22 @@ async function commit(next){
 }
 const p=profile(db.tasks),projects=db.projects.filter(x=>tab===2||x.space===db.space),tasks=db.tasks.filter(x=>(tab===2||x.space===db.space)&&(tab!==0||!isArchived(x.project,db.projects))),roots=projects.filter(x=>!x.parent&&(tab!==0||!isArchived(x.id,db.projects))),belongs=(t,id)=>t.project===id||projects.some(x=>x.id===t.project&&x.parent===id),visible=tasks.filter(t=>(tab!==0||!isTaskArchived(t,clock))&&(!filter||belongs(t,filter))),projectName=id=>projects.find(x=>x.id===id)?.name,selected=projects.find(x=>x.id===filter),parent=selected?.parent||filter;
 async function changeTaskStatus(task,value){
- if(cloud.locked||Number(value)===task.status)return;
+ if(cloud.locked||!task||Number(value)===task.status)return;
  try{
   const {kind,...changed}=task;
   const currentTask=task._virtual?changed:db.tasks.find(item=>item.id===task.id);
   if(!currentTask)throw Error('Cette tâche a changé. Rouvrez le calendrier.');
   const next=materializeOccurrence(db,{...currentTask,status:Number(value)});
   const saved=task._virtual?next.tasks.find(item=>!db.tasks.some(old=>old.id===item.id)):next.tasks.find(item=>item.id===task.id);
-  if(await commit(next))M(Number(value)===2?null:{...saved,kind:'detail'});
+  if(await commit(next)){if(Number(value)===3)M({...saved,kind:'postpone'});else if(modal?.kind==='detail')M(Number(value)===2?null:{...saved,kind:'detail'})}
  }catch(error){window.alert(error.message)}
+}
+function postponeForm(){
+ return h('form',{onSubmit:async event=>{event.preventDefault();try{const chosen=event.currentTarget?new FormData(event.currentTarget).get('reportDate'):modal.reportDate;if(await commit(postponeTask(db,modal.id,chosen)))M(null)}catch(error){window.alert(error.message)}}},
+  h('p',null,'Pénalité de 10 XP appliquée une seule fois à cette tâche (plancher : 0 XP). Souhaitez-vous la reporter ?'),
+  modal.recurrence&&modal.recurrence!=='none'&&h('p',{className:'periodnote'},'Le report décale aussi les occurrences suivantes non terminées. Les réalisations passées restent inchangées.'),
+  h('label',null,'Nouvelle date',h('input',{name:'reportDate',type:'date',required:true,value:modal.reportDate||'',onChange:event=>update('reportDate',event.target.value)})),
+  h('div',{className:'actions'},h('button',{type:'submit',className:'primary'},'Reporter'),btn('Garder la date actuelle',()=>M(null),'outline')));
 }
 async function removeTask(task){
  if(cloud.locked)return;
@@ -76,7 +86,7 @@ function archiveView(){
 }
 function activityView(){
  const events=normalize(db).activities.filter(event=>event.space===db.space).slice().sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
- const labels={completed:'Tâche terminée',reopened:'Tâche rouverte',deleted:'Tâche supprimée',archived:'Projet archivé',restored:'Projet restauré'};
+ const labels={completed:'Tâche terminée',reopened:'Tâche rouverte',deleted:'Tâche supprimée',archived:'Projet archivé',restored:'Projet restauré',missed:'Tâche non réalisée (−10 XP)'};
  return h('section',{className:'activityjournal'},h('h2',null,'Journal d’activité'),
   h('p',null,'Les réalisations restent consultables après réouverture ou suppression.'),
   events.length?h('ol',null,events.slice(0,200).map(event=>h('li',{key:event.id},
@@ -90,9 +100,9 @@ function activityView(){
 function openProject(project){F(project.id);M({kind:'tree',id:project.id,name:project.name})}
 function openRpg(){M({kind:'rpg'})}
 function rpgDetails(){
- const totalXP=db.tasks.reduce((sum,task)=>sum+(task.status===2?priorities[task.priority]:0),0);
+ const totalExperience=Math.max(0,totalXP(db.tasks));
  return h('div',{className:'rpgdetails'},
-  h('p',null,'Niveau '+p.level+' / 50 · '+totalXP.toLocaleString('fr-FR')+' XP cumulés'),
+  h('p',null,'Niveau '+p.level+' / 50 · '+totalExperience.toLocaleString('fr-FR')+' XP cumulés'),
   h('ol',{className:'gradelist'},grades.map((grade,index)=>{
    const first=index===10?50:index*5+1,last=index===10?50:index===9?49:first+4;
    const threshold=(first-1)*first*50;
@@ -102,11 +112,11 @@ function rpgDetails(){
     h('div',null,h('strong',null,grade),h('p',null,'Niveau'+(first===last?' '+first:'x '+first+' à '+last)+' · '+threshold.toLocaleString('fr-FR')+' XP cumulés'),
      current&&h('div',null,h('span',{className:'gradestate'},'Grade actuel'),
       index<10&&h('div',{className:'gradeprogress'},h('p',null,'Progression vers le prochain grade'),
-       meter(totalXP-threshold,((last+1)*last*50)-threshold),
-       h('p',null,(((last+1)*last*50)-totalXP).toLocaleString('fr-FR')+' XP restants')),
+       meter(totalExperience-threshold,((last+1)*last*50)-threshold),
+       h('p',null,(((last+1)*last*50)-totalExperience).toLocaleString('fr-FR')+' XP restants')),
       index===10&&h('p',null,'Grade ultime atteint')),
 
-     !unlocked&&h('p',null,(threshold-totalXP).toLocaleString('fr-FR')+' XP pour atteindre ce grade'))
+     !unlocked&&h('p',null,(threshold-totalExperience).toLocaleString('fr-FR')+' XP pour atteindre ce grade'))
    );
   }))
  );
@@ -204,7 +214,7 @@ function eventForm(){
 }
 function eventDetails(){
  return h('div',{className:'eventdetails'},h('h3',null,modal.title),h('p',{className:'periodnote'},'Événement personnel · sans XP ni statistiques'),
-  h('label',null,'Statut',sel(modal.status,value=>eventStatus(modal,value),status.map((label,index)=>[index,label]),'Statut de l’événement')),
+  h('label',null,'Statut',sel(modal.status,value=>eventStatus(modal,value),status.slice(0,3).map((label,index)=>[index,label]),'Statut de l’événement')),
   h('p',null,modal.dueDate?new Date(modal.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'Date non définie'),
   h('p',null,modal.startTime?modal.startTime+' – '+modal.endTime:'Sans horaire'),
   h('p',{className:'description'},modal.description||'Aucune description'),
@@ -232,27 +242,28 @@ async function submit(e){e.preventDefault();let {kind,...obj}=modal;let field=ki
  const previous=db.tasks.find(task=>task.id===obj.id);
  if(obj.dueDate!==previous?.dueDate)obj.recurrenceDay=obj.dueDate?Number(obj.dueDate.slice(-2)):null;
 }
+ if(kind==='task'&&obj.id){try{if(await commit(updateTaskSchedule(db,obj)))M(null)}catch(error){window.alert(error.message)}return}
  let key=kind==='task'?'tasks':'projects';let list=obj.id?db[key].map(x=>x.id===obj.id?obj:x):[...db[key],{...obj,id:uid(),...(kind==='task'?{status:0,date:null}:{})}];if(await commit({...db,[key]:list}))M(null)}
 function meter(v,max){return h('progress',{value:v,max:max||1,'aria-label':'Progression'})}
 function statsRow(x,clickable=false){const list=tasks.filter(t=>belongs(t,x.id)),done=list.filter(t=>t.status===2).length;return h(clickable?'button':'div',{className:'statrow projectcolored'+(clickable?' projectstat':''),style:projectStyle(x.id,db.projects),key:x.id,...(clickable?{type:'button',onClick:()=>openProject(x)}:{})},h('strong',null,x.name),h('span',null,list.length?done+' / '+list.length+' · '+Math.round(100*done/list.length)+' %':'Aucune tâche'),meter(done,list.length))}
-const pic=['circle','clock','check'];const nav=['Tableau de bord','Calendrier','Statistiques','Journal','Archives'];
-return h(R.Fragment,null,h('header',null,h('div',{className:'head'},h('b',{className:'brand'},icon('compass',30),'Log Pose'),h('nav',null,nav.map((v,i)=>btn(v,()=>{T(i);F('');M(null)},tab===i?'active':'',['board','calendar','stats','clock','folder'][i]))),h('button',{type:'button',className:'avatar accountavatar',title:'Compte et synchronisation','aria-label':'Ouvrir le compte et la synchronisation','aria-haspopup':'dialog',onClick:()=>M({kind:'account'})},h('img',{src:'luffy-avatar.svg?v=20261110-9',alt:'Luffy',width:44,height:44})))),
+const pic=['circle','clock','check','circle'];const nav=['Tableau de bord','Calendrier','Statistiques','Journal','Archives'];
+return h(R.Fragment,null,h('header',null,h('div',{className:'head'},h('b',{className:'brand'},icon('compass',30),'Log Pose'),h('nav',null,nav.map((v,i)=>btn(v,()=>{T(i);F('');M(null)},tab===i?'active':'',['board','calendar','stats','clock','folder'][i]))),h('button',{type:'button',className:'avatar accountavatar',title:'Compte et synchronisation','aria-label':'Ouvrir le compte et la synchronisation','aria-haspopup':'dialog',onClick:()=>M({kind:'account'})},h('img',{src:'luffy-avatar.svg?v=20261113-1',alt:'Luffy',width:44,height:44})))),
 h('main',null,h('button',{type:'button',className:'accountnotice',onClick:()=>M({kind:'account'})},cloud.label||'Compte et synchronisation',' · Gérer mon compte'),h('fieldset',{disabled:cloud.locked,className:'workspace'},h('div',{className:'intro'},h('div',null,h('small',null,'CARNET DE NAVIGATION'),h('h1',null,nav[tab])),tab!==1&&tab!==2&&h('div',{className:'switch'},spaces.map((v,i)=>btn(v,()=>{commit({...db,space:v});F('')},db.space===v?'chosen':'',i?'case':'person')))),
-h('section',{ref:profileRef,className:'hero clickable'+(xpGain?' xp-earned':''),role:'button',tabIndex:0,'aria-label':'Voir ma progression RPG',onClick:openRpg,onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openRpg()}}},h(Sea),xpGain&&h('span',{key:xpGain.id,className:'xpgain',role:'status','aria-live':'polite'},'+'+xpGain.amount+' XP'),h('div',{className:'badge'},icon('anchor',42)),h('div',{className:'profile'},h('small',null,'PROFIL RPG'),h('h2',null,p.grade),h('div',{className:'level'},h('b',null,'Niveau '+p.level),' · '+p.title),h('div',{className:'xp'},h('span',null,'Expérience'),h('b',null,p.level===50?'Niveau maximum':p.xp+' / '+p.level*100+' XP')),meter(p.level===50?1:p.xp,p.level===50?1:p.level*100)) ),
+h('section',{ref:profileRef,className:'hero clickable'+(xpGain?' xp-earned':''),role:'button',tabIndex:0,'aria-label':'Voir ma progression RPG',onClick:openRpg,onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openRpg()}}},h(Sea),xpGain&&h('span',{key:xpGain.id,className:'xpgain'+(xpGain.amount<0?' xploss':''),role:'status','aria-live':'polite'},(xpGain.amount>0?'+':'')+xpGain.amount+' XP'),h('div',{className:'badge'},icon('anchor',42)),h('div',{className:'profile'},h('small',null,'PROFIL RPG'),h('h2',null,p.grade),h('div',{className:'level'},h('b',null,'Niveau '+p.level),' · '+p.title),h('div',{className:'xp'},h('span',null,'Expérience'),h('b',null,p.level===50?'Niveau maximum':p.xp+' / '+p.level*100+' XP')),meter(p.level===50?1:p.xp,p.level===50?1:p.level*100)) ),
 tab===1?h(Calendar,{
  tasks:[...db.tasks.filter(task=>!isArchived(task.project,db.projects)),...calendarEvents(db)],
- recurrenceSkips:db.recurrenceSkips||[],
+ recurrenceSkips:db.recurrenceSkips||[],seriesPlans:db.seriesPlans||[],
  onOpen:task=>task._event?M({...db.events.find(event=>event.id===task._eventId),kind:'eventdetail'}):M({...task,kind:'detail'}),
  onCreate:(date,slot)=>M({kind:'quickcreate',slot,...calendarDraft(date,slot)}),
- onReschedule:task=>task._event?commit(upsertEvent(db,{...task,id:task._eventId})):commit(materializeOccurrence(db,task))
+ onReschedule:task=>task._event?commit(upsertEvent(db,{...task,id:task._eventId})):commit(updateTaskSchedule(db,task))
 }):tab===3?activityView():tab===4?archiveView():tab===0?h(R.Fragment,null,h('div',{className:'sectiontitle'},h('h2',null,'Mes projets ',h('em',null,roots.length)),btn('Créer un projet',()=>formProject(),'outline','plus')),h('div',{className:'projects'},roots.length?roots.map(x=>h('div',{className:'project projectcolored '+(parent===x.id?'selected':''),style:projectStyle(x.id,db.projects),key:x.id,onClick:e=>{if(!e.target.closest('button'))openProject(x)}},btn(x.name,()=>openProject(x),'plain','folder'),btn('Renommer',()=>formProject('',x),'mini'),statsRow({...x,name:''}))):h('div',{className:'emptyproject'},h('i',null,icon('folder',29)),h('div',null,h('strong',null,'Aucun projet pour le moment'),h('p',null,'Créez un projet pour regrouper vos tâches.')))),
 parent&&h('div',{className:'subs'},btn(projectName(parent),()=>openProject(projects.find(x=>x.id===parent))),projects.filter(x=>x.parent===parent).map(x=>btn(x.name,()=>openProject(x),filter===x.id?'chosen projectcolored':'projectcolored',undefined,projectStyle(x.id,db.projects))),btn('Sous-projet',()=>formProject(parent),'','plus'),selected?.parent&&btn('Renommer',()=>formProject(parent,selected))),
 eventsFolder(),h('div',{className:'sectiontitle boardtitle'},h('h2',null,'Tableau Kanban'),h('div',{className:'actions'},sel(filter,F,[['','Toutes les tâches'],...projects.filter(x=>!isArchived(x.id,db.projects)).map(x=>[x.id,(x.parent?'↳ ':'')+x.name])],'Filtrer par projet'),btn('Nouvelle tâche',()=>formTask(),'primary','plus'))),
-h('div',{className:'kanban'},status.map((name,i)=>{const list=visible.filter(t=>t.status===i);return h('section',{className:'column c'+i,key:name,onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault();commit({...db,tasks:move(db.tasks,e.dataTransfer.getData('text/plain'),i)})}},h('h3',null,icon(pic[i]),name,h('em',null,list.length)),list.length?list.map(t=>h('article',{key:t.id,draggable:true,className:'taskcard projectcolored'+(t.status===2?' completed':''),style:projectStyle(t.project,db.projects),onClick:e=>{
+h('div',{className:'kanban'},status.map((name,i)=>{const list=visible.filter(t=>t.status===i);return h('section',{className:'column c'+i,key:name,onDragOver:e=>e.preventDefault(),onDrop:e=>{e.preventDefault();changeTaskStatus(db.tasks.find(task=>task.id===e.dataTransfer.getData('text/plain')),i)}},h('h3',null,icon(pic[i]),name,h('em',null,list.length)),list.length?list.map(t=>h('article',{key:t.id,draggable:true,className:'taskcard projectcolored'+(t.status===2?' completed':''),style:projectStyle(t.project,db.projects),onClick:e=>{
  if(!e.target.closest('button,select,option'))M({...t,kind:'detail'});
-},onDragStart:e=>e.dataTransfer.setData('text/plain',t.id)},btn(t.title,()=>M({...t,kind:'detail'}),'tasktitle'),h('p',null,projectName(t.project)),t.dueDate&&h('p',{className:'scheduledtag'},new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR')+(t.startTime?' · '+t.startTime+'–'+t.endTime:'')),t.recurrence&&t.recurrence!=='none'&&h('p',{className:'recurrencetag'},'↻ '+recurrenceLabels[t.recurrence]+(t.dueDate?' · '+new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'')),h('div',{className:'taskmeta'},h('label',null,t.priority),sel(t.status,v=>commit({...db,tasks:move(db.tasks,t.id,+v)}),status.map((s,i)=>[i,s]),'Statut de '+t.title)))):h('div',{className:'void'},icon(pic[i],25),h('p',null,['Aucune tâche à faire','Aucune tâche en cours','Aucune tâche terminée'][i]),i===0&&btn('Ajouter une tâche',()=>formTask(),'link','plus'))) }))) :
+},onDragStart:e=>e.dataTransfer.setData('text/plain',t.id)},btn(t.title,()=>M({...t,kind:'detail'}),'tasktitle'),h('p',null,projectName(t.project)),t.dueDate&&h('p',{className:'scheduledtag'},new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR')+(t.startTime?' · '+t.startTime+'–'+t.endTime:'')),t.recurrence&&t.recurrence!=='none'&&h('p',{className:'recurrencetag'},'↻ '+recurrenceLabels[t.recurrence]+(t.dueDate?' · '+new Date(t.dueDate+'T12:00:00').toLocaleDateString('fr-FR'):'')),h('div',{className:'taskmeta'},h('label',null,t.priority),sel(t.status,v=>changeTaskStatus(t,v),status.map((s,i)=>[i,s]),'Statut de '+t.title)))):h('div',{className:'void'},icon(pic[i],25),h('p',null,['Aucune tâche à faire','Aucune tâche en cours','Aucune tâche terminée','Aucune tâche non réalisée'][i]),i===0&&btn('Ajouter une tâche',()=>formTask(),'link','plus'))) }))) :
 h('section',{className:'analytics'},h('p',{className:'periodnote'},'Chaque tâche est comptée une seule fois, à sa première réalisation, même si elle est rouverte puis terminée à nouveau.'),h('div',{className:'sectiontitle'},h('h2',null,'Avancée des projets'),h(ProjectFilter,{projects,value:filter,onChange:F})),h('div',{className:'metrics'},[[(visible.length?Math.round(100*visible.filter(t=>t.status===2).length/visible.length):0)+' %','Taux de complétion'],[visible.length,'Tâches au total']].map(([n,l])=>h('section',null,h('b',null,n),h('p',null,l)))),h(TaskStatistics,{tasks:completions(db,undefined,filter),projects,globalTasks:completions(db,undefined,filter),globalProjects:db.projects}),h('h3',null,'Répartition par statut'),status.map((s,i)=>{let n=visible.filter(t=>t.status===i).length;return h('div',{className:'statrow'},s,h('span',null,n),meter(n,visible.length))}),h('h3',null,'Projets et sous-projets'),projectStatistics(),!projects.length&&h('p',null,'Aucun projet pour le moment.'))),
-),modal&&h('dialog',{ref:dialog,'aria-label':['event','eventdetail','quickcreate'].includes(modal.kind)?'Événements et création':modal.kind==='account'?'Compte et synchronisation':modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':'Formulaire',onCancel:()=>M(null)},h('div',{className:'sectiontitle'},h('h2',null,modal.kind==='quickcreate'?'Créer dans le calendrier':modal.kind==='event'?(modal.id?'Modifier l’événement':'Nouvel événement'):modal.kind==='eventdetail'?'Détail de l’événement':modal.kind==='account'?'Compte et synchronisation':modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':modal.id?'Modifier '+(modal.kind==='task'?'la tâche':'le projet'):modal.kind==='task'?'Nouvelle tâche':modal.parent?'Nouveau sous-projet':'Nouveau projet'),btn('Fermer',()=>M(null),'mini')),modal.kind==='quickcreate'?quickCreate():modal.kind==='event'?eventForm():modal.kind==='eventdetail'?eventDetails():modal.kind==='account'?h('div',{className:'accountview'},cloud.panel(db)):modal.kind==='rpg'?rpgDetails():modal.kind==='tree'?projectTree():modal.kind==='detail'?h('div',null,taskDetails(modal),modal._virtual?h('div',{className:'actions'},btn('Modifier la série',()=>{const source=db.tasks.find(task=>task.id===modal._sourceTaskId);if(source)formTask(source);else{M(null);N('La série a changé. Rouvrez le calendrier.')}},'primary'),btn('Supprimer cette occurrence',()=>removeTask(modal),'danger')):!isArchived(modal.project,db.projects)&&h('div',{className:'actions'},btn('Modifier',()=>formTask({...modal,kind:'task'}),'primary'),btn('Supprimer',()=>removeTask(modal),'danger'))):h('form',{onSubmit:submit},h('label',null,modal.kind==='task'?'Titre':'Nom',h('input',{autoFocus:true,required:true,value:modal.title??modal.name,onChange:e=>update(modal.kind==='task'?'title':'name',e.target.value)})),modal.kind==='task'&&h(R.Fragment,null,h('label',null,'Description',h('textarea',{rows:4,value:modal.description,onChange:e=>update('description',e.target.value)})),h('label',null,'Date prévue',h('input',{type:'date',value:modal.dueDate||'',onChange:event=>update('dueDate',event.target.value)})),
+),modal&&h('dialog',{ref:dialog,'aria-label':['event','eventdetail','quickcreate'].includes(modal.kind)?'Événements et création':modal.kind==='account'?'Compte et synchronisation':modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':'Formulaire',onCancel:()=>M(null)},h('div',{className:'sectiontitle'},h('h2',null,modal.kind==='postpone'?'Tâche non réalisée · reporter ?':modal.kind==='quickcreate'?'Créer dans le calendrier':modal.kind==='event'?(modal.id?'Modifier l’événement':'Nouvel événement'):modal.kind==='eventdetail'?'Détail de l’événement':modal.kind==='account'?'Compte et synchronisation':modal.kind==='rpg'?'Progression RPG':modal.kind==='tree'?'Projet et tâches':modal.kind==='detail'?'Détail de la tâche':modal.id?'Modifier '+(modal.kind==='task'?'la tâche':'le projet'):modal.kind==='task'?'Nouvelle tâche':modal.parent?'Nouveau sous-projet':'Nouveau projet'),btn('Fermer',()=>M(null),'mini')),modal.kind==='postpone'?postponeForm():modal.kind==='quickcreate'?quickCreate():modal.kind==='event'?eventForm():modal.kind==='eventdetail'?eventDetails():modal.kind==='account'?h('div',{className:'accountview'},cloud.panel(db)):modal.kind==='rpg'?rpgDetails():modal.kind==='tree'?projectTree():modal.kind==='detail'?h('div',null,taskDetails(modal),modal._virtual?h('div',{className:'actions'},btn('Modifier la série',()=>{const source=db.tasks.find(task=>task.id===modal._sourceTaskId);if(source)formTask(source);else{M(null);N('La série a changé. Rouvrez le calendrier.')}},'primary'),btn('Supprimer cette occurrence',()=>removeTask(modal),'danger')):!isArchived(modal.project,db.projects)&&h('div',{className:'actions'},btn('Modifier',()=>formTask({...modal,kind:'task'}),'primary'),btn('Supprimer',()=>removeTask(modal),'danger'))):h('form',{onSubmit:submit},h('label',null,modal.kind==='task'?'Titre':'Nom',h('input',{autoFocus:true,required:true,value:modal.title??modal.name,onChange:e=>update(modal.kind==='task'?'title':'name',e.target.value)})),modal.kind==='task'&&h(R.Fragment,null,h('label',null,'Description',h('textarea',{rows:4,value:modal.description,onChange:e=>update('description',e.target.value)})),h('label',null,'Date prévue',h('input',{type:'date',value:modal.dueDate||'',onChange:event=>update('dueDate',event.target.value)})),
  h('div',{className:'tasktimefields'},h('label',null,'De',h(TimeSelect,{label:'Heure de début',value:modal.startTime||'',onChange:value=>update('startTime',value)})),h('label',null,'À',h(TimeSelect,{label:'Heure de fin',value:modal.endTime||'',onChange:value=>update('endTime',value)}))),
  h('label',null,'Récurrence',sel(modal.recurrence||'none',v=>update('recurrence',v),Object.entries(recurrenceLabels),'Récurrence')),
 

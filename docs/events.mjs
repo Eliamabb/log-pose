@@ -1,4 +1,4 @@
-import {validSchedule,clock} from './calendar-data.mjs?v=20261110-9';
+import {validSchedule,clock} from './calendar-data.mjs?v=20261113-1';
 export function eventRecord(input){
  const result={id:input.id||crypto.randomUUID(),title:(input.title||'').trim(),description:input.description||'',space:'Personnel',dueDate:input.dueDate||'',startTime:input.startTime||'',endTime:input.endTime||'',status:input.status??0};
  if(!result.title||!validSchedule(result)||![0,1,2].includes(result.status))throw Error('Saisissez un titre et un créneau valide, avec la fin après le début le même jour.');

@@ -1,4 +1,4 @@
-import {validSchedule} from './calendar-data.mjs?v=20261110-9';
+import {validSchedule} from './calendar-data.mjs?v=20261113-1';
 export function valid(data){
  if(!data||!['Personnel','Professionnel'].includes(data.space)||!Array.isArray(data.tasks)||!Array.isArray(data.projects))return false;
  if(data.tasks.length>20000||data.projects.length>2000)return false;
@@ -7,7 +7,7 @@ export function valid(data){
   if(!Array.isArray(data.activities))return false;
   const eventIds=new Set();
   for(const event of data.activities){
-   if(!event||typeof event.id!=='string'||eventIds.has(event.id)||!['completed','reopened','deleted','archived','restored'].includes(event.action)||typeof event.title!=='string'||!['Personnel','Professionnel'].includes(event.space))return false;
+   if(!event||typeof event.id!=='string'||eventIds.has(event.id)||!['completed','reopened','deleted','archived','restored','missed'].includes(event.action)||typeof event.title!=='string'||!['Personnel','Professionnel'].includes(event.space))return false;
    if(event.timestamp!==null&&!(typeof event.timestamp==='number'&&Number.isFinite(event.timestamp)&&event.timestamp>0))return false;
    for(const key of ['projectId','projectName','rootProjectId','rootProjectName'])if(typeof event[key]!=='string')return false;
    eventIds.add(event.id);
@@ -27,8 +27,10 @@ export function valid(data){
    eventIds.add(event.id);
   }
  }
+ if(data.seriesPlans!==undefined&&(!Array.isArray(data.seriesPlans)||!data.seriesPlans.every(plan=>plan&&typeof plan.seriesId==='string'&&typeof plan.projectId==='string'&&typeof plan.fromDate==='string'&&!!plan.fromDate&&validSchedule({dueDate:plan.fromDate})&&validSchedule({dueDate:plan.startDate})&&typeof plan.startDate==='string'&&plan.startDate&&Number.isInteger(plan.anchorDay)&&plan.anchorDay>=1&&plan.anchorDay<=31)))return false;
  const tids=new Set();
  return data.tasks.every(t=>{if(!t||typeof t!=='object'||tids.has(t.id))return false;tids.add(t.id);
+ if(t.missedPenalty!==undefined&&typeof t.missedPenalty!=='boolean')return false;
  if(t._virtual||t._sourceTaskId||t._occurrenceDate)return false;
  if(t.seriesId!==undefined&&typeof t.seriesId!=='string')return false;
  if(t.recurrenceSourceDate!==undefined&&(typeof t.recurrenceSourceDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(t.recurrenceSourceDate)))return false;
@@ -40,5 +42,5 @@ export function valid(data){
   if(typeof t.recurrenceEndDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(t.recurrenceEndDate)||new Date(t.recurrenceEndDate+'T12:00:00').getDate()!==Number(t.recurrenceEndDate.slice(-2)))return false;
   if(t.dueDate&&t.recurrenceEndDate<t.dueDate)return false;
  }
- return typeof t.id==='string'&&typeof t.title==='string'&&t.title.trim()&&(!t.description||typeof t.description==='string')&&['Basse','Moyenne','Haute'].includes(t.priority)&&[0,1,2].includes(t.status)&&['Personnel','Professionnel'].includes(t.space)&&(!t.project||data.projects.some(p=>p.id===t.project&&p.space===t.space))});
+ return typeof t.id==='string'&&typeof t.title==='string'&&t.title.trim()&&(!t.description||typeof t.description==='string')&&['Basse','Moyenne','Haute'].includes(t.priority)&&[0,1,2,3].includes(t.status)&&['Personnel','Professionnel'].includes(t.space)&&(!t.project||data.projects.some(p=>p.id===t.project&&p.space===t.space))});
 }

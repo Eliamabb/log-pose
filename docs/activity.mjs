@@ -1,5 +1,5 @@
-import {uniqueCompletions} from './task-retention.mjs?v=20261110-9';
-import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261110-9';
+import {uniqueCompletions} from './task-retention.mjs?v=20261113-1';
+import {withSeriesIds,seriesKeys} from './recurrence.mjs?v=20261113-1';
 export const recurrenceLabels={none:'Aucune',daily:'Tous les jours',weekly:'Toutes les semaines',monthly:'Tous les mois'};
 const uuid=()=>crypto.randomUUID();
 export function isArchived(projectId,projects){
@@ -26,14 +26,14 @@ export function nextDue(task,now=new Date()){
  let date=value?new Date(value+'T12:00:00'):new Date(now);
  date.setHours(12,0,0,0);
  const anchor=task.recurrenceDay||date.getDate();
- const today=new Date(now);today.setHours(12,0,0,0);
+ 
  do{
   if(task.recurrence==='monthly'){
    const year=date.getFullYear(),month=date.getMonth()+1;
    const last=new Date(year,month+1,0).getDate();
    date=new Date(year,month,Math.min(anchor,last),12);
   }else date.setDate(date.getDate()+(task.recurrence==='weekly'?7:1));
- }while(date<=today);
+ }while(false);
  const formatted=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
  if(task.recurrenceEndDate&&formatted>task.recurrenceEndDate)return null;
  return {dueDate:formatted,recurrenceDay:anchor};
@@ -47,10 +47,15 @@ export function recordChanges(before,next,now=Date.now()){
  const byId=new Map(before.tasks.map(task=>[task.id,task]));
  for(const task of tasks){
   const old=byId.get(task.id);
+  if(old?.missedPenalty)task.missedPenalty=true;
+  if(task.status===3&&!old?.missedPenalty){task.missedPenalty=true;activities.push({id:uuid(),action:'missed',timestamp:now,...snapshot(task,next.projects)})}
   if(task.status===2&&old?.status!==2){
    task.date=now;
    activities.push({id:uuid(),action:'completed',timestamp:now,...snapshot(task,next.projects)});
    let schedule=['daily','weekly','monthly'].includes(task.recurrence)&&!task.nextTaskId?nextDue({...task,dueDate:task.recurrenceSourceDate||task.dueDate},new Date(now)):null;
+   for(const plan of (next.seriesPlans||[]).filter(item=>item.seriesId===task.seriesId)){
+    if(schedule&&task.seriesRebased!==plan.startDate&&(task.recurrenceSourceDate||task.dueDate)<plan.fromDate&&schedule.dueDate>=plan.fromDate)schedule={dueDate:plan.startDate,recurrenceDay:plan.anchorDay};
+   }
    while(schedule&&(next.recurrenceSkips||[]).some(item=>item.seriesId===task.seriesId&&item.date===schedule.dueDate)){
     schedule=nextDue({...task,dueDate:schedule.dueDate,recurrenceDay:schedule.recurrenceDay},new Date(now));
    }
@@ -59,7 +64,7 @@ export function recordChanges(before,next,now=Date.now()){
     if(existing)task.nextTaskId=existing.id;
     else{
      const nextId=uuid();task.nextTaskId=nextId;
-     const {nextTaskId,date,recurrenceSourceDate,seriesStartTime,seriesEndTime,...template}=task;
+     const {nextTaskId,date,recurrenceSourceDate,seriesStartTime,seriesEndTime,missedPenalty,...template}=task;
      tasks.push({...template,id:nextId,status:0,date:null,...schedule,
       startTime:seriesStartTime??task.startTime??'',endTime:seriesEndTime??task.endTime??''});
     }
@@ -78,7 +83,7 @@ export function recordChanges(before,next,now=Date.now()){
   }
  }
  for(const task of before.tasks)if(!ids.has(task.id)&&!removedProjects.has(task.project))activities.push({id:uuid(),action:'deleted',timestamp:now,...snapshot(task,before.projects)});
- return {...next,tasks,activities,activityVersion:1,recurrenceSkips};
+ return {...next,tasks,activities,activityVersion:1,recurrenceSkips,seriesPlans:(next.seriesPlans||[]).filter(item=>!removedProjects.has(item.projectId))};
 }
 export function archiveProject(data,id,archived,now=Date.now()){
  const state=normalize(data),project=state.projects.find(item=>item.id===id);
@@ -98,6 +103,7 @@ export function deleteProject(data,id){
   projects:state.projects.filter(project=>!removed.has(project.id)),
   tasks:state.tasks.filter(task=>!removed.has(task.project)),
   activities:state.activities.filter(event=>!removed.has(event.projectId)&&!removed.has(event.rootProjectId)),
+  seriesPlans:(state.seriesPlans||[]).filter(item=>!removed.has(item.projectId)),
   recurrenceSkips:(state.recurrenceSkips||[]).filter(item=>!removed.has(item.projectId))
  };
 }

@@ -1,16 +1,16 @@
-import {TimeSelect} from './ui-controls.js?v=20261110-9';
-import {projectOccurrences} from './recurrence.mjs?v=20261110-9';
+import {TimeSelect} from './ui-controls.js?v=20261113-1';
+import {projectOccurrences} from './recurrence.mjs?v=20261113-1';
 import {React as R} from './react.js';
-import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261110-9';
+import {dateKey,weekDays,monthDays,shiftPeriod,layoutTimedTasks,droppedTask,reschedule} from './calendar-data.mjs?v=20261113-1';
 const h=R.createElement;
 const weekdays=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const dateLabel=date=>date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
-export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule,onCreate=()=>{}}){
+export function Calendar({tasks,recurrenceSkips=[],seriesPlans=[],onOpen,onReschedule,onCreate=()=>{}}){
  const [view,setView]=R.useState('week'),[anchor,setAnchor]=R.useState(()=>new Date()),[move,setMove]=R.useState(null),[notice,setNotice]=R.useState('');
  const scroll=R.useRef(null),dragged=R.useRef(0);
  R.useEffect(()=>{if(view==='week'&&scroll.current)scroll.current.scrollTop=7*56},[view]);
  const days=view==='week'?weekDays(anchor):monthDays(anchor),today=dateKey(new Date());
- const displayed=projectOccurrences(tasks,days[0],days[days.length-1],recurrenceSkips);
+ const displayed=projectOccurrences(tasks,days[0],days[days.length-1],recurrenceSkips,seriesPlans);
  const sorted=[...displayed].sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||'')||(a.startTime||'').localeCompare(b.startTime||'')||a.title.localeCompare(b.title,'fr'));
  const undated=sorted.filter(task=>!task.dueDate);
  const title=view==='week'?dateLabel(days[0])+' – '+dateLabel(days[6]):anchor.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
@@ -30,7 +30,7 @@ export function Calendar({tasks,recurrenceSkips=[],onOpen,onReschedule,onCreate=
  function createKeys(event,date,slot){if(event.target===event.currentTarget&&['Enter',' '].includes(event.key)){event.preventDefault();create(date,slot)}}
  function eventButton(task,style){
   const timing=task.startTime?task.startTime+'–'+task.endTime:'Sans horaire';
-  return h('button',{type:'button',key:task.id,className:'calevent '+(task._event?'eventcolor':task.space==='Professionnel'?'pro':'personal')+(task.status===2?' completed':'')+(task._virtual?' projected':''),style,
+  return h('button',{type:'button',key:task.id,className:'calevent '+(task._event?'eventcolor':task.space==='Professionnel'?'pro':'personal')+(task.status===2?' completed':task.status===3?' missed':'')+(task._virtual?' projected':''),style,
    title:task.title+' · '+(task._event?'Événement personnel':task.space)+' · '+timing,
    'aria-label':task.title+' · '+(task._event?'Événement personnel':task.space)+' · '+timing,
    draggable:true,onDragStart:event=>{dragged.current=Date.now();event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('application/x-logpose-task',task.id)},

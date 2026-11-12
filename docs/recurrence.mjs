@@ -1,4 +1,4 @@
-import {dateKey,parseDay} from './calendar-data.mjs?v=20261110-9';
+import {dateKey,parseDay} from './calendar-data.mjs?v=20261113-1';
 const frequencies=new Set(['daily','weekly','monthly']);
 export function seriesKeys(tasks){
  const byId=new Map(tasks.map(task=>[task.id,task]));
@@ -43,7 +43,7 @@ function firstVisibleOccurrence(value,from,frequency,anchor){
  date.setDate(date.getDate()+Math.ceil(distance/step)*step);
  return dateKey(date);
 }
-export function projectOccurrences(tasks,start,end,skips=[]){
+export function projectOccurrences(tasks,start,end,skips=[],plans=[]){
  const from=dateKey(start),until=dateKey(end),keys=seriesKeys(tasks),groups=new Map(),result=[...tasks];
  for(const task of tasks){
   const key=keys.get(task.id);
@@ -56,18 +56,30 @@ export function projectOccurrences(tasks,start,end,skips=[]){
    .sort((a,b)=>(a.recurrenceSourceDate||a.dueDate).localeCompare(b.recurrenceSourceDate||b.dueDate));
   const source=pending.find(task=>!task.recurrenceSourceDate)||pending[0];
   if(!source||!frequencies.has(source.recurrence))continue;
-  const base=source.recurrenceSourceDate||source.dueDate;
+  const seriesPlans=plans.filter(item=>item.seriesId===seriesId);
+  const earliest=members.filter(task=>task.dueDate&&task.recurrence===source.recurrence).map(task=>task.recurrenceSourceDate||task.dueDate).sort()[0];
+  const base=earliest||source.recurrenceSourceDate||source.dueDate;
   const anchor=source.recurrenceDay||parseDay(base).getDate();
   const represented=new Set(members.map(task=>task.recurrenceSourceDate||task.dueDate));
-  let date=advanceOccurrence(base,source.recurrence,anchor);
-  if(date)date=firstVisibleOccurrence(date,from,source.recurrence,anchor);
-  while(date&&date<=until&&(!source.recurrenceEndDate||date<=source.recurrenceEndDate)){
-   if(date>=from&&!represented.has(date)&&!skipped.has(seriesId+'|'+date)){
-    const {nextTaskId,date:completedDate,recurrenceSourceDate,...template}=source;
-    result.push({...template,id:'preview:'+seriesId+':'+date,dueDate:date,status:0,date:null,seriesId,recurrenceDay:anchor,startTime:source.seriesStartTime??source.startTime,endTime:source.seriesEndTime??source.endTime,
-     _virtual:true,_sourceTaskId:source.id,_occurrenceDate:date});
+  const original=members.find(task=>(task.recurrenceSourceDate||task.dueDate)===base);
+  let segments=[{base,anchor:original?.recurrenceDay||anchor}];
+  for(const plan of seriesPlans){
+   const boundary=plan.fromDate<plan.startDate?plan.fromDate:plan.startDate;
+   segments=segments.map(segment=>({...segment,before:segment.before&&segment.before<boundary?segment.before:boundary}));
+   segments.push({base:plan.startDate,anchor:plan.anchorDay,tag:plan.startDate});
+  }
+  for(const segment of segments){
+   let date=advanceOccurrence(segment.base,source.recurrence,segment.anchor);
+   if(date)date=firstVisibleOccurrence(date,from,source.recurrence,segment.anchor);
+   while(date&&date<=until&&(!segment.before||date<segment.before)&&(!source.recurrenceEndDate||date<=source.recurrenceEndDate)){
+    if(date>=from&&!represented.has(date)&&!skipped.has(seriesId+'|'+date)){
+     const {nextTaskId,date:completedDate,recurrenceSourceDate,missedPenalty,...template}=source;
+     result.push({...template,id:'preview:'+seriesId+':'+date,dueDate:date,status:0,date:null,seriesId,recurrenceDay:segment.anchor,seriesRebased:segment.tag||source.seriesRebased,startTime:source.seriesStartTime??source.startTime,endTime:source.seriesEndTime??source.endTime,
+      _virtual:true,_sourceTaskId:source.id,_occurrenceDate:date});
+     represented.add(date);
+    }
+    date=advanceOccurrence(date,source.recurrence,segment.anchor);
    }
-   date=advanceOccurrence(date,source.recurrence,anchor);
   }
  }
  return result;
@@ -80,7 +92,7 @@ export function materializeOccurrence(data,task){
  const seriesId=source.seriesId||source.id;
  const exists=tasks.find(item=>item.seriesId===seriesId&&(item.recurrenceSourceDate||item.dueDate)===task._occurrenceDate);
  if(exists)throw Error('Cette occurrence existe déjà. Rechargez le calendrier.');
- const {_virtual,_sourceTaskId,_occurrenceDate,nextTaskId,...saved}=task;
+ const {_virtual,_sourceTaskId,_occurrenceDate,nextTaskId,missedPenalty,...saved}=task;
  return {...data,tasks:[...tasks,{...saved,id:crypto.randomUUID(),seriesId,recurrenceSourceDate:_occurrenceDate,seriesStartTime:source.seriesStartTime??source.startTime??'',seriesEndTime:source.seriesEndTime??source.endTime??''}]};
 }
 export function removeOccurrence(data,task){
